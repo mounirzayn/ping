@@ -256,6 +256,8 @@ function openBrowser(url) {
 }
 
 app.on('web-contents-created', (_e, wc) => {
+  // Une page (Facebook, LBC…) ne doit jamais pouvoir bloquer la fermeture de Ping
+  wc.on('will-prevent-unload', (ev) => ev.preventDefault());
   if (wc.getType() === 'webview') {
     wc.setWindowOpenHandler(({ url }) => { wc.loadURL(url); return { action: 'deny' }; });
   }
@@ -377,5 +379,6 @@ app.whenReady().then(() => {
 });
 app.on('second-instance', showMain);
 app.on('activate', showMain);
-app.on('before-quit', () => { quitting = true; try { fs.writeFileSync(dataFile, JSON.stringify(state)); } catch {} });
+app.on('before-quit', () => { quitting = true;
+  for (const bw of workers.values()) { try { if (!bw.isDestroyed()) bw.destroy(); } catch {} } try { fs.writeFileSync(dataFile, JSON.stringify(state)); } catch {} });
 app.on('window-all-closed', (e) => e.preventDefault()); // reste actif dans la barre des menus

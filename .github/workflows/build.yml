@@ -2,7 +2,7 @@ name: Construire Ping (Mac + Windows)
 on:
   push:
     branches: [main]
-    paths: ['mac/**', '.github/workflows/mac.yml']
+    paths: ['mac/**', '.github/workflows/build.yml']
   workflow_dispatch:
 permissions:
   contents: write

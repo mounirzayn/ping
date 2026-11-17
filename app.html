@@ -297,8 +297,9 @@ $('#newForm').onsubmit = async (e) => {
   const sites = [...document.querySelectorAll('.chips input:checked')].map((i) => i.value);
   if (!sites.length) return toast('Choisis au moins un site');
   if (!q && cat === 'tout') return toast('Ajoute des mots-clés ou une catégorie');
-  const base = { name: $('#fName').value.trim() || q || CATS[cat].label, cat, min: $('#fMin').value, max: $('#fMax').value, exclude: $('#fExclude').value, interval: +$('#fInterval').value };
-  const list = sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q, cat, base.min, base.max) }));
+  const base = { group: crypto.randomUUID(), include: q, name: $('#fName').value.trim() || q.split(',')[0].trim() || CATS[cat].label, cat, min: $('#fMin').value, max: $('#fMax').value, exclude: $('#fExclude').value, interval: +$('#fInterval').value };
+  const q1 = q.split(',')[0].trim();
+  const list = sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, base.min, base.max) }));
   if (await send('addWatches', list)) {
     toast('Ping envoyé au Mac');
     ['#fName', '#fQuery', '#fMin', '#fMax', '#fExclude'].forEach((s) => ($(s).value = ''));

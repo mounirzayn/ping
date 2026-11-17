@@ -2,83 +2,179 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<title>Ping · Tableau de bord</title>
-<link rel="stylesheet" href="assets/styles.css">
-<style>header{-webkit-app-region:drag;padding-left:90px}.os-win32 header{padding-left:28px;-webkit-app-region:no-drag}header *{-webkit-app-region:no-drag}.hdr-actions{display:flex;gap:8px;align-items:center}</style>
+<title>Ping</title>
+<style>
+:root{--bg:#0b0d12;--card:#12151d;--card2:#171b25;--line:#1f2430;--txt:#e8ecf3;--mut:#8a93a6;--acc:#39ff88;--warn:#ffb648;--bad:#ff5d6c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+header{display:flex;align-items:center;gap:22px;padding:14px 24px 14px 92px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(11,13,18,.95);backdrop-filter:blur(8px);z-index:5;-webkit-app-region:drag}
+.os-win32 header{padding-left:24px;-webkit-app-region:no-drag}
+header *{-webkit-app-region:no-drag}
+.brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:20px}.brand img{width:26px}
+.tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px}
+.tabs button{border:0;background:transparent;color:var(--mut);padding:8px 16px;border-radius:9px;font-weight:600;font-size:13.5px;position:relative}
+.tabs button.on{background:var(--acc);color:#04120a}
+.tabs .badge{position:absolute;top:-4px;right:-4px;background:var(--bad);color:#fff;font-size:10px;border-radius:99px;padding:1px 6px}
+.status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--mut)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--mut);display:inline-block;flex:none}.dot.ok{background:var(--acc);box-shadow:0 0 8px var(--acc)}.dot.blocked{background:var(--warn)}.dot.error,.dot.empty{background:var(--bad)}
+main{max-width:1180px;margin:0 auto;padding:22px 24px 60px;display:block}
+.view{display:none}.view.on{display:block}
+.head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px}
+.head h1{margin:0;font-size:24px}.head p{margin:4px 0 0;color:var(--mut);font-size:13px}
+/* Flux */
+.feed{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.hit{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;transition:.15s}
+.hit:hover{border-color:var(--acc);transform:translateY(-2px)}
+.hit.new{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.hit .img{aspect-ratio:4/3;background:#1a1e28 center/cover no-repeat;position:relative;display:grid;place-items:center;color:var(--mut);font-size:13px}
+.site{position:absolute;top:8px;left:8px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;color:#fff}
+.s-Leboncoin{background:#ec5a13}.s-Marketplace{background:#1877f2}.s-Vinted{background:#09848f}.s-eBay{background:#e53238}
+.hit .b{padding:12px 13px;display:flex;flex-direction:column;gap:4px;flex:1}
+.hit .p{color:var(--acc);font-weight:800;font-size:20px}
+.hit .t{font-size:13.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:36px}
+.hit .m{color:var(--mut);font-size:12px}
+.hit .go{margin-top:8px;display:flex;gap:6px}
+.hit .go button{flex:1}
+/* Pings */
+.groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
+.g{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.g .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.g h3{margin:0;font-size:17px}.g .f{color:var(--mut);font-size:12.5px;margin-top:3px}
+.rows{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.row{display:flex;align-items:center;gap:10px;background:var(--card2);border-radius:10px;padding:8px 10px;font-size:13px}
+.row .n{font-weight:700;width:96px}
+.row .st{color:var(--mut);flex:1;font-size:12px}
+.row .acts{display:flex;gap:4px}
+/* Formulaire */
+.form{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:760px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.wide{grid-column:span 2}
+label{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--mut)}
+label small{color:#6b7385}
+input,select{background:#0b0d12;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px}
+input:focus,select:focus{outline:none;border-color:var(--acc)}
+.sites{display:flex;gap:8px;flex-wrap:wrap}
+.chip{flex-direction:row;align-items:center;gap:7px;background:#0b0d12;border:1px solid var(--line);padding:8px 14px;border-radius:99px;color:var(--txt);cursor:pointer;font-size:13.5px}
+.chip input{accent-color:var(--acc)}
+button{font:inherit;cursor:pointer;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--txt);padding:7px 12px;font-size:12.5px}
+button:hover{border-color:var(--acc);color:var(--acc)}
+button.primary{background:var(--acc);color:#04120a;border:none;font-weight:800;padding:12px 24px;font-size:14.5px}
+button.primary:hover{color:#04120a;filter:brightness(1.1)}
+button.mini{padding:4px 9px;font-size:12px}
+.empty{color:var(--mut);text-align:center;padding:60px 20px;border:1px dashed var(--line);border-radius:14px}
+.empty b{color:var(--txt);display:block;font-size:16px;margin-bottom:6px}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.card h2{margin:0 0 10px;font-size:15px}
+.card p{color:var(--mut);font-size:13px;margin:6px 0}
+code{background:#0b0d12;border:1px solid var(--line);padding:3px 8px;border-radius:6px;color:var(--acc);font-size:12.5px;word-break:break-all}
+.row2{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--acc);color:#04120a;font-weight:700;padding:10px 18px;border-radius:99px;opacity:0;transition:.25s;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%)}
+details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
+@media(max-width:900px){.cards,.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+</style>
 </head>
 <body>
 <header>
-  <div class="brand"><img src="assets/icon.png" alt=""><span>Ping</span><em>alertes annonces instantanées</em></div>
-  <div class="hdr-actions"><div class="stats"><span id="statWatches">0 ping actif</span><span id="statHits">0 alerte</span></div><button id="btnBrowser" class="ghost small">🌐 Navigateur</button><button id="btnPause" class="ghost small">Pause</button></div>
+  <div class="brand"><img src="assets/icon.png" alt="">Ping</div>
+  <nav class="tabs">
+    <button data-v="feed" class="on">Annonces<span class="badge" id="unreadBadge" hidden></span></button>
+    <button data-v="pings">Mes recherches</button>
+    <button data-v="new">+ Nouvelle recherche</button>
+    <button data-v="settings">Réglages</button>
+  </nav>
+  <div class="status"><span class="dot" id="globalDot"></span><span id="globalTxt"></span></div>
 </header>
 
 <main>
-  <section class="card" id="create">
-    <h2>Nouveau ping</h2>
-    <div class="grid">
-      <label>Nom<input id="fName" placeholder="PS5 pas chère"></label>
-      <label>Catégorie
-        <select id="fCat"></select>
-      </label>
-      <label>Mots-clés recherchés<input id="fQuery" placeholder="ps5, playstation 5"></label>
-      <label>Prix min (€)<input id="fMin" type="number" min="0" placeholder="0"></label>
-      <label>Prix max (€)<input id="fMax" type="number" min="0" placeholder="350"></label>
-      <label>Fréquence
-        <select id="fInterval">
-          <option value="30">30 s (rapide)</option>
-          <option value="45">45 s</option>
-          <option value="60" selected>1 min (recommandé)</option>
-          <option value="120">2 min</option>
-          <option value="300">5 min</option>
-        </select>
-      </label>
-      <label class="wide">Exclure les annonces contenant<input id="fExclude" placeholder="cassé, hs, pièces, boîte vide, échange"></label>
+  <!-- ANNONCES -->
+  <section class="view on" id="v-feed">
+    <div class="head">
+      <div><h1>Nouvelles annonces</h1><p>Les annonces sorties depuis que tu surveilles, de la plus récente à la plus ancienne. Clique pour ouvrir l'annonce sur le site.</p></div>
+      <button id="btnClear">Tout marquer comme vu</button>
     </div>
-    <div class="sites">
-      <span>Sites :</span>
-      <label class="chip"><input type="checkbox" value="lbc" checked> Leboncoin</label>
-      <label class="chip"><input type="checkbox" value="fb" checked> Marketplace</label>
-      <label class="chip"><input type="checkbox" value="vinted"> Vinted</label>
-      <label class="chip"><input type="checkbox" value="ebay"> eBay</label>
+    <div class="feed" id="feed"></div>
+  </section>
+
+  <!-- RECHERCHES -->
+  <section class="view" id="v-pings">
+    <div class="head">
+      <div><h1>Mes recherches</h1><p>Chaque recherche est surveillée sur les sites choisis. Pastille verte = tout va bien.</p></div>
+      <button id="btnPause">Tout mettre en pause</button>
     </div>
-    <details>
-      <summary>Ou coller directement une URL de recherche</summary>
-      <input id="fUrl" placeholder="https://www.leboncoin.fr/recherche?category=43&text=switch...">
-    </details>
-    <button id="btnAdd" class="primary">Créer le ping</button>
+    <div class="groups" id="groups"></div>
   </section>
 
-  <section class="card">
-    <h2>Mes pings</h2>
-    <div id="watchList" class="watch-list"></div>
+  <!-- NOUVELLE -->
+  <section class="view" id="v-new">
+    <div class="head"><div><h1>Nouvelle recherche</h1><p>Dis à Ping ce que tu cherches : il te prévient dès qu'une annonce correspondante sort.</p></div></div>
+    <div class="form">
+      <div class="grid">
+        <label class="wide">Que cherches-tu ? <small>Plusieurs variantes possibles, séparées par des virgules</small>
+          <input id="fQuery" placeholder="ps5, playstation 5"></label>
+        <label>Catégorie<select id="fCat"></select></label>
+        <label>Vérifier toutes les
+          <select id="fInterval">
+            <option value="30">30 secondes (très rapide)</option>
+            <option value="60" selected>1 minute (recommandé)</option>
+            <option value="120">2 minutes</option>
+            <option value="300">5 minutes</option>
+          </select></label>
+        <label>Prix minimum (€)<input id="fMin" type="number" min="0" placeholder="aucun"></label>
+        <label>Prix maximum (€)<input id="fMax" type="number" min="0" placeholder="ex : 280"></label>
+        <label class="wide">Ignorer les annonces qui contiennent <small>Ex : manette, jeu, cassé, pièces</small>
+          <input id="fExclude" placeholder="manette, jeu, cassé, hs, pièces, boîte vide"></label>
+        <div class="wide"><label>Sur quels sites ?</label>
+          <div class="sites" style="margin-top:6px">
+            <label class="chip"><input type="checkbox" value="lbc" checked> Leboncoin</label>
+            <label class="chip"><input type="checkbox" value="fb" checked> Marketplace</label>
+            <label class="chip"><input type="checkbox" value="vinted" checked> Vinted</label>
+            <label class="chip"><input type="checkbox" value="ebay"> eBay</label>
+          </div></div>
+        <details class="wide"><summary>Avancé : coller l'adresse d'une recherche déjà faite sur un site</summary>
+          <input id="fUrl" style="width:100%;margin-top:8px;box-sizing:border-box" placeholder="https://www.leboncoin.fr/recherche?..."></details>
+      </div>
+      <div style="margin-top:20px"><button class="primary" id="btnAdd">Lancer la surveillance</button></div>
+    </div>
   </section>
 
-  <section class="card feed-card">
-    <div class="feed-head"><h2>Flux en direct</h2><button id="btnClear" class="ghost">Tout marquer lu</button></div>
-    <div id="feed" class="feed"></div>
-  </section>
-
-  <section class="card">
-    <h2>Alertes sur ton téléphone</h2>
-    <ol class="steps">
-      <li>Installe l'appli gratuite <b>ntfy</b> (App Store ou Google Play).</li>
-      <li>Dans l'appli, appuie sur <b>+</b> et abonne-toi au canal : <code id="topic"></code> <button id="btnCopy" class="ghost small">Copier</button></li>
-            <li>Appuie sur <button id="btnTest" class="ghost small">Envoyer un test</button> : la notif doit arriver sur ton téléphone en une seconde.</li>
-    </ol>
-    <p><b>Ton espace web</b> (flux + gestion de tes pings depuis l'iPhone) : <button id="btnWeb" class="ghost small">Ouvrir</button> <button id="btnWebCopy" class="ghost small">Copier le lien perso</button></p>
-    <p class="muted">Ouvre ce lien perso sur ton iPhone puis "Partager > Sur l'écran d'accueil" pour l'avoir comme une appli.</p>
-    <label class="row"><input type="checkbox" id="desktopNotif"> Notifications aussi sur le Mac</label>
-    <p class="muted">Garde ce canal secret : quiconque le connaît peut lire tes alertes. Tu peux le changer :
-      <input id="topicEdit" class="inline"> <button id="btnTopic" class="ghost small">Enregistrer</button></p>
-  </section>
-
-  <section class="card muted-card">
-    <h2>Avant de commencer</h2>
-    <p>Ping a son propre navigateur, avec tes connexions gardées en mémoire. Ouvre-le une fois et connecte-toi aux sites qui le demandent :</p>
-    <p><button class="ghost small" data-open="https://www.facebook.com/marketplace/">Se connecter à Facebook</button> <button class="ghost small" data-open="https://www.leboncoin.fr">Ouvrir Leboncoin</button> <button class="ghost small" data-open="https://www.vinted.fr">Ouvrir Vinted</button></p>
-    <p>Ensuite Ping tourne en arrière-plan (icône dans la barre des menus sur Mac, près de l'horloge sur Windows), même fenêtre fermée. Si un site demande une vérification, Ping se met en pause et te prévient : clique sur la notif, valide dans le navigateur Ping, et ça repart.</p>
+  <!-- RÉGLAGES -->
+  <section class="view" id="v-settings">
+    <div class="head"><div><h1>Réglages</h1></div></div>
+    <div class="cards">
+      <div class="card">
+        <h2>📱 Alertes sur ton téléphone</h2>
+        <p>1. Installe l'appli gratuite <b>ntfy</b> (App Store ou Google Play).</p>
+        <p>2. Dans ntfy, appuie sur <b>+</b> et abonne-toi à ton code :</p>
+        <div class="row2"><code id="topic"></code><button id="btnCopy" class="mini">Copier</button></div>
+        <p>3. <button id="btnTest" class="mini">Envoyer une alerte de test</button></p>
+        <p><label style="flex-direction:row;align-items:center;gap:8px;color:var(--txt)"><input type="checkbox" id="desktopNotif"> Alertes aussi sur cet ordinateur</label></p>
+      </div>
+      <div class="card">
+        <h2>🌐 Ton espace web</h2>
+        <p>Les annonces et tes recherches depuis ton téléphone, où que tu sois.</p>
+        <div class="row2"><button id="btnWeb">Ouvrir mon espace</button><button id="btnWebCopy">Copier mon lien perso</button></div>
+        <p>Sur iPhone : ouvre le lien dans Safari, puis Partager › Sur l'écran d'accueil.</p>
+      </div>
+      <div class="card">
+        <h2>🔑 Code d'accès</h2>
+        <p>Ton code relie l'appli, le site et ntfy. Garde-le secret.</p>
+        <div class="row2"><input id="topicEdit" style="flex:1"><button id="btnTopic">Enregistrer</button></div>
+      </div>
+      <div class="card">
+        <h2>🔓 Connexions aux sites</h2>
+        <p>Ping utilise son propre navigateur. Connecte-toi une fois, il s'en souvient.</p>
+        <div class="row2">
+          <button data-open="https://www.facebook.com/marketplace/">Facebook (obligatoire pour Marketplace)</button>
+          <button data-open="https://www.leboncoin.fr">Leboncoin</button>
+          <button data-open="https://www.vinted.fr">Vinted</button>
+        </div>
+        <p>Si un site demande une vérification, Ping se met en pause et te prévient : valide-la ici, ça repart tout seul.</p>
+      </div>
+    </div>
   </section>
 </main>
+<div class="toast" id="toast"></div>
 <script src="renderer.js"></script>
 </body>
 </html>

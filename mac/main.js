@@ -26,6 +26,11 @@ function load() {
   dataFile = path.join(app.getPath('userData'), 'ping-data.json');
   try { state = JSON.parse(fs.readFileSync(dataFile, 'utf8')); } catch { state = {}; }
   state = { watches: [], hits: [], unread: 0, ntfyTopic: '', desktopNotif: true, ...state };
+  if (!state.v2) { // nouvelle lecture des annonces : on repart d'une base propre
+    state.hits = []; state.unread = 0;
+    state.watches.forEach((w) => { w.seen = []; w.primed = false; w.count = 0; });
+    state.v2 = true;
+  }
   if (!state.ntfyTopic) state.ntfyTopic = 'ping-' + crypto.randomBytes(9).toString('hex');
   save();
 }
@@ -78,18 +83,48 @@ function extractListings() {
     [/vinted\.[a-z.]+\/items\/(\d+)/, 'Vinted'],
     [/ebay\.[a-z.]+\/itm\/(?:[^/]+\/)?(\d{9,})/, 'eBay'],
   ];
+  const idOf = (href) => { for (const [p, s] of pats) { const m = href.match(p); if (m) return [m[1], s]; } return [null, null]; };
+  const isItem = (el) => !!idOf(el.href || '')[0];
+  // Prix : "20 €", "1 350 €", "230.00 €", "21,70 €", "€200", "EUR 12,00"
+  const priceRe = /(?:€|EUR)\s?(\d{1,3}(?:[\s  .]\d{3})*|\d+)(?:[.,](\d{1,2}))?|(\d{1,3}(?:[\s  .]\d{3})*|\d+)(?:[.,](\d{1,2}))?\s?(?:€|EUR)/;
+  const parsePrice = (t) => {
+    if (/\b(gratuit|free)\b/i.test(t || '') && !priceRe.test(t)) return 0;
+    const m = (t || '').match(priceRe); if (!m) return null;
+    const ent = (m[1] || m[3]).replace(/[\s  .]/g, ''); const dec = m[2] || m[4] || '0';
+    return parseFloat(ent + '.' + dec);
+  };
+  const bad = /^(voir l.annonce|see listing|sponsoris|nouveau|new|\d+([.,]\d)?\s*\(\d+\)|prix|située|livraison|pro|urgent|à la une)/i;
   const out = new Map();
   for (const a of document.querySelectorAll('a[href]')) {
-    const href = a.href;
-    let id = null, site = null;
-    for (const [p, s] of pats) { const m = href.match(p); if (m) { id = m[1]; site = s; break; } }
-    if (!id || out.has(id)) continue;
-    const text = (a.innerText || a.getAttribute('aria-label') || a.title || '').replace(/\s+/g, ' ').trim();
-    if (!text) continue;
-    const pm = text.match(/(\d[\d\s  .]*(?:,\d{1,2})?)\s?(?:€|EUR)/);
-    const price = pm ? parseFloat(pm[1].replace(/[\s  .]/g, '').replace(',', '.')) : null;
-    const img = a.querySelector('img');
-    out.set(id, { id: site + ':' + id, site, url: href.split('?')[0], title: text.slice(0, 160), price, img: img ? (img.currentSrc || img.src) : null });
+    const [rawId, site] = idOf(a.href);
+    if (!rawId || out.has(rawId)) continue;
+    // Carte = plus grand parent qui ne contient que cette annonce
+    let card = a;
+    while (card.parentElement && card.parentElement !== document.body) {
+      const p = card.parentElement;
+      const ids = new Set([...p.querySelectorAll('a[href]')].filter(isItem).map((x) => idOf(x.href)[0]));
+      if (ids.size > 1) break;
+      card = p;
+    }
+    // Photo : la plus grande image réelle de la carte (pas l'avatar du vendeur)
+    let img = null, best = 0;
+    for (const im of card.querySelectorAll('img')) {
+      const src = im.currentSrc || im.src || im.getAttribute('data-src') || '';
+      if (!/^https?:/.test(src) || /pp-small|avatar|profile|logo|icon/i.test(src)) continue;
+      const r = im.getBoundingClientRect(); const area = Math.max(r.width * r.height, (im.naturalWidth || 0) * (im.naturalHeight || 0) / 4, 1);
+      if (area > best) { best = area; img = src; }
+    }
+    // Titre
+    const srTitle = ([...card.querySelectorAll('span,h2,h3')].map((e) => e.textContent.trim()).find((t) => /^(voir l.annonce|see listing)\s*:\s*\S/i.test(t)) || '').replace(/^[^:]+:\s*/, '');
+    const attrTitle = srTitle || [a.getAttribute('title'), a.getAttribute('aria-label')].find((t) => t && t.length > 8 && !bad.test(t)) || '';
+    const imgAlt = [...card.querySelectorAll('img[alt]')].map((i) => i.alt).find((t) => t && t.length > 8 && !/avatar|profil|logo/i.test(t)) || '';
+    const lines = (card.innerText || '').split('\n').map((l) => l.trim()).filter((l) => l.length > 3 && !bad.test(l) && !priceRe.test(l) && !/\b\d{5}\b/.test(l));
+    const fromLines = lines.sort((x, y) => y.length - x.length)[0] || '';
+    let title = (attrTitle || imgAlt || fromLines).split(/,\s*(?:Marque|État|Taille|Brand|Condition)\s*:/)[0].replace(/,\s*\d[\d.,\s]*\s?€.*$/, '').trim();
+    if (!title) continue;
+    const price = parsePrice(attrTitle) ?? parsePrice(imgAlt) ?? parsePrice(card.innerText);
+    const url = a.href.split('?')[0].split('#')[0];
+    out.set(rawId, { id: site + ':' + rawId, site, url, title: title.slice(0, 140), price, img });
   }
   const head = (document.title + ' ' + (document.body ? document.body.innerText.slice(0, 600) : '')).toLowerCase();
   const blocked = /captcha|datadome|verify you are human|vous êtes un robot|accès temporairement restreint|log in to continue|connecte-toi pour|se connecter à facebook/.test(head);
@@ -116,8 +151,10 @@ async function check(id, manual = false) {
     await Promise.race([bw.loadURL(w.url).catch(() => {}), sleep(30000)]);
     await sleep(2500 + Math.random() * 1500);
     // petit défilement pour charger les vignettes paresseuses
-    await bw.webContents.executeJavaScript('window.scrollTo(0, 1200); true').catch(() => {});
-    await sleep(800);
+    for (const y of [700, 1400, 2100]) {
+      await bw.webContents.executeJavaScript(`window.scrollTo(0, ${y}); true`).catch(() => {});
+      await sleep(450);
+    }
     result = await bw.webContents.executeJavaScript(`(${extractListings.toString()})()`);
   } catch (e) {
     result.error = String(e.message || e);
@@ -130,7 +167,7 @@ async function check(id, manual = false) {
   if (result.blocked) {
     w.status = 'blocked';
     if (!w.blockedNotified) {
-      notify({ title: '⚠️ Ping en pause : ' + w.name, message: 'Le site demande une vérification ou une connexion. Clique pour la faire dans Ping.', url: w.url });
+      notify({ title: '⚠️ Ping en pause : ' + w.name, message: 'Le site demande une vérification ou une connexion. Clique pour la faire dans Ping.', url: w.url, inApp: true });
       w.blockedNotified = true;
     }
     save();
@@ -167,21 +204,26 @@ async function check(id, manual = false) {
   if (w.active) scheduleNext(w);
 }
 
+const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+function keywordsOf(w) {
+  if (w.include) return w.include;
+  try { const u = new URL(w.url); return u.searchParams.get('text') || u.searchParams.get('query') || u.searchParams.get('search_text') || u.searchParams.get('_nkw') || ''; } catch { return ''; }
+}
 function matches(w, it) {
   if (w.min !== '' && w.min != null && it.price != null && it.price < +w.min) return false;
   if (w.max !== '' && w.max != null && it.price != null && it.price > +w.max) return false;
-  const t = it.title.toLowerCase();
-  const list = (s) => (s || '').toLowerCase().split(',').map((x) => x.trim()).filter(Boolean);
+  const t = norm(it.title);
+  const list = (s) => String(s || '').split(',').map(norm).filter(Boolean);
   if (list(w.exclude).some((x) => t.includes(x))) return false;
-  const incl = list(w.include);
-  return !incl.length || incl.some((x) => t.includes(x));
+  const incl = list(keywordsOf(w));
+  return !incl.length || incl.some((x) => t.includes(x)); // l'annonce doit contenir un des mots-clés
 }
 
 // ---------- Notifications : Mac + téléphone (ntfy) ----------
-function notify({ title, message, url, img }) {
+function notify({ title, message, url, img, inApp }) {
   if (state.desktopNotif !== false && Notification.isSupported()) {
     const n = new Notification({ title, body: message, silent: false });
-    n.on('click', () => openBrowser(url));
+    n.on('click', () => { if (inApp) openBrowser(url); else if (/^https:\/\//.test(url)) shell.openExternal(url); });
     n.show();
   }
   if (state.ntfyTopic) {
@@ -227,7 +269,7 @@ function doAction(type, p, fromWeb = false) {
   switch (type) {
     case 'addWatches': {
       const list = (Array.isArray(p) ? p : []).filter((w) => w && ALLOWED_URL.test(w.url || '')).slice(0, 8).map((w) => ({
-        name: String(w.name || 'Ping').slice(0, 60), site: String(w.site || '').slice(0, 20), cat: String(w.cat || 'tout'),
+        group: String(w.group || '').slice(0, 64) || undefined, name: String(w.name || 'Ping').slice(0, 60), site: String(w.site || '').slice(0, 20), cat: String(w.cat || 'tout'),
         url: w.url, min: w.min ?? '', max: w.max ?? '', include: String(w.include || ''), exclude: String(w.exclude || '').slice(0, 300),
         interval: Math.max(MIN_INTERVAL, +w.interval || 60),
         id: crypto.randomUUID(), seen: [], primed: false, count: 0, status: 'pending', active: true,

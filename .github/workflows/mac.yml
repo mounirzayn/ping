@@ -1,0 +1,48 @@
+name: Construire Ping pour Mac
+on:
+  push:
+    branches: [main]
+    paths: ['mac/**', '.github/workflows/mac.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Construire l'appli
+        working-directory: mac
+        run: |
+          npm install --no-audit --no-fund
+          npx electron-builder --mac --arm64 --dir
+          codesign --force --deep --sign - dist/mac-arm64/Ping.app
+      - name: Préparer le zip
+        run: |
+          mkdir -p Ping-Mac
+          cp -R mac/dist/mac-arm64/Ping.app Ping-Mac/
+          cat > "Ping-Mac/Installer Ping.command" <<'SH'
+          #!/bin/bash
+          cd "$(dirname "$0")"
+          echo "Installation de Ping..."
+          osascript -e 'quit app "Ping"' 2>/dev/null
+          rm -rf "/Applications/Ping.app"
+          cp -R "Ping.app" "/Applications/Ping.app" || { echo "Impossible de copier dans Applications."; read -p "Entrée pour fermer"; exit 1; }
+          xattr -cr "/Applications/Ping.app"
+          codesign --force --deep --sign - "/Applications/Ping.app" >/dev/null 2>&1
+          echo "Ping est installé. Lancement..."
+          open "/Applications/Ping.app"
+          SH
+          sed -i '' 's/^          //' "Ping-Mac/Installer Ping.command"
+          chmod +x "Ping-Mac/Installer Ping.command"
+          ditto -c -k --sequesterRsrc --keepParent Ping-Mac Ping-Mac.zip
+      - name: Publier la version
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Ping 1.0.${{ github.run_number }} pour Mac
+          body: "Télécharge Ping-Mac.zip, dézippe, puis clic droit sur « Installer Ping.command » > Ouvrir."
+          files: Ping-Mac.zip
+          make_latest: true

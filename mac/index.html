@@ -119,9 +119,12 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
     <div class="head"><div><h1>Nouvelle recherche</h1><p>Dis à Ping ce que tu cherches : il te prévient dès qu'une annonce correspondante sort.</p></div></div>
     <div class="form">
       <div class="grid">
-        <label class="wide">Que cherches-tu ? <small>Plusieurs variantes possibles, séparées par des virgules</small>
-          <input id="fQuery" placeholder="ps5, playstation 5"></label>
         <label>Catégorie<select id="fCat"></select></label>
+        <label id="cityBox" hidden>Où ? <small id="cityHint">Ville (ex : Melun)</small><input id="fCity" placeholder="Ville"></label>
+        <label class="wide">Que cherches-tu ? <small id="qHint">Plusieurs variantes possibles, séparées par des virgules</small>
+          <input id="fQuery" placeholder="ps5, playstation 5"></label>
+        <label>Prix minimum (€)<input id="fMin" type="number" min="0" placeholder="aucun"></label>
+        <label>Prix maximum (€)<input id="fMax" type="number" min="0" placeholder="aucun"></label>
         <label>Vérifier toutes les
           <select id="fInterval">
             <option value="30">30 secondes (très rapide)</option>
@@ -129,18 +132,13 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
             <option value="120">2 minutes</option>
             <option value="300">5 minutes</option>
           </select></label>
-        <label>Prix minimum (€)<input id="fMin" type="number" min="0" placeholder="aucun"></label>
-        <label>Prix maximum (€)<input id="fMax" type="number" min="0" placeholder="ex : 280"></label>
-        <label class="wide">Ignorer les annonces qui contiennent <small>Ex : manette, jeu, cassé, pièces</small>
-          <input id="fExclude" placeholder="manette, jeu, cassé, hs, pièces, boîte vide"></label>
-        <label class="wide chip" style="border-radius:12px;justify-content:flex-start"><input type="checkbox" id="fStrict" checked> <span><b>Uniquement l'objet lui-même</b><br><small>Ignore les accessoires et jeux vendus seuls : manettes, housses, coques, câbles, « pour PS5 »…</small></span></label>
-        <div class="wide"><label>Sur quels sites ?</label>
-          <div class="sites" style="margin-top:6px">
-            <label class="chip"><input type="checkbox" value="lbc" checked> Leboncoin</label>
-            <label class="chip"><input type="checkbox" value="fb" checked> Marketplace</label>
-            <label class="chip"><input type="checkbox" value="vinted" checked> Vinted</label>
-            <label class="chip"><input type="checkbox" value="ebay"> eBay</label>
-          </div></div>
+        <label>Ignorer les annonces qui contiennent <small>Ex : cassé, pièces</small>
+          <input id="fExclude" placeholder="cassé, hs, pièces"></label>
+        <label class="wide chip" style="border-radius:12px;justify-content:flex-start"><input type="checkbox" id="fStrict"> <span><b>Uniquement l'objet lui-même</b><br><small>Ignore les accessoires vendus seuls, les annonces « recherche » et les échanges</small></span></label>
+        <div class="wide"><label>Sites surveillés pour cette catégorie</label>
+          <div class="sites" id="siteChips" style="margin-top:6px"></div></div>
+        <div class="wide" id="specBox"><label>Sites spécialisés <small>Ouvre le site dans Ping, fais ta recherche, puis clique sur « ➕ Surveiller cette page »</small></label>
+          <div class="sites" id="specLinks" style="margin-top:6px"></div></div>
         <label class="wide" style="border-top:1px solid var(--line);padding-top:14px">Ou surveille une recherche sur <b style="color:var(--txt)">n'importe quel site</b> <small>Fais ta recherche sur le site (ParuVendu, Rakuten, AutoScout24…), trie par « plus récentes », puis colle le lien ici. Les cases de sites ci-dessus sont alors ignorées.</small>
           <input id="fUrl" placeholder="https://www.site-d-annonces.fr/recherche?..."></label>
       </div>
@@ -186,6 +184,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
   </section>
 </main>
 <div class="toast" id="toast"></div>
+<script src="catalog.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>

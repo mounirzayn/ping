@@ -1,12 +1,4 @@
-const CATS = {
-  consoles: { label: 'Consoles & jeux vidéo', lbc: 43 },
-  voitures: { label: 'Voitures', lbc: 2 },
-  motos: { label: 'Motos', lbc: 3 },
-  telephones: { label: 'Téléphones', lbc: 17 },
-  informatique: { label: 'Informatique', lbc: 15 },
-  tout: { label: 'Toutes catégories', lbc: null },
-};
-const SITE_NAMES = { lbc: 'Leboncoin', fb: 'Marketplace', vinted: 'Vinted', ebay: 'eBay' };
+const { CATS, SITE_NAMES, groupOf, buildUrl, fillSelect } = window.PING_CATALOG;
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const act = (t, p) => window.ping.action(t, p);
@@ -25,43 +17,37 @@ function go(v) {
 document.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => go(b.dataset.v)));
 
 // ---------- Construction des URL de recherche ----------
-$('#fCat').innerHTML = Object.entries(CATS).map(([k, c]) => `<option value="${k}">${c.label}</option>`).join('');
-function buildUrl(site, q, catKey, min, max) {
-  const cat = CATS[catKey];
-  const query = q || (catKey !== 'tout' ? cat.label : '');
-  let u;
-  if (site === 'lbc') {
-    u = new URL('https://www.leboncoin.fr/recherche');
-    if (cat.lbc) u.searchParams.set('category', cat.lbc);
-    if (q) u.searchParams.set('text', q);
-    if (min || max) u.searchParams.set('price', `${min || 'min'}-${max || 'max'}`);
-    u.searchParams.set('sort', 'time'); u.searchParams.set('order', 'desc');
-  } else if (site === 'fb') {
-    u = new URL('https://www.facebook.com/marketplace/search/');
-    u.searchParams.set('query', query); u.searchParams.set('sortBy', 'creation_time_descend');
-    if (min) u.searchParams.set('minPrice', min); if (max) u.searchParams.set('maxPrice', max);
-  } else if (site === 'vinted') {
-    u = new URL('https://www.vinted.fr/catalog');
-    u.searchParams.set('search_text', query); u.searchParams.set('order', 'newest_first');
-    if (min) u.searchParams.set('price_from', min); if (max) u.searchParams.set('price_to', max);
-  } else {
-    u = new URL('https://www.ebay.fr/sch/i.html');
-    u.searchParams.set('_nkw', query); u.searchParams.set('_sop', '10');
-    if (min) u.searchParams.set('_udlo', min); if (max) u.searchParams.set('_udhi', max);
-  }
-  return u.toString();
+// ---------- Formulaire : la catégorie décide des sites proposés ----------
+fillSelect($('#fCat'), 'consoles');
+function onCatChange() {
+  const g = groupOf($('#fCat').value);
+  $('#siteChips').innerHTML = g.sites.map((s) => `<label class="chip"><input type="checkbox" value="${s}" ${g.defaults.includes(s) ? 'checked' : ''}> ${SITE_NAMES[s]}</label>`).join('');
+  $('#specBox').hidden = !g.links.length;
+  $('#specLinks').innerHTML = g.links.map(([n, u]) => `<button class="mini" data-spec="${u}">${n} ↗</button>`).join('');
+  $('#cityBox').hidden = !g.city;
+  $('#cityHint').textContent = g.cityRequired ? 'Ville (obligatoire, ex : Melun)' : 'Ville (facultatif, ex : Melun)';
+  $('#fStrict').checked = !!g.strict;
+  $('#qHint').textContent = g.id === 'immobilier' ? 'Facultatif : ex. « T3, balcon »' : 'Plusieurs variantes possibles, séparées par des virgules';
+  $('#fQuery').placeholder = { vehicules: 'clio 4, 208', immobilier: 'T3, balcon', multimedia: 'ps5, playstation 5', maison: 'canapé cuir', mode: 'air max 90', loisirs: 'lego star wars', famille: 'poussette yoyo' }[g.id] || 'que cherches-tu ?';
 }
+$('#fCat').onchange = onCatChange;
+onCatChange();
+$('#specLinks').onclick = (e) => { const b = e.target.closest('[data-spec]'); if (b) act('openBrowser', b.dataset.spec); };
+
 const siteOf = (url) => (/leboncoin\./.test(url) ? 'Leboncoin' : /facebook\./.test(url) ? 'Marketplace' : /vinted\./.test(url) ? 'Vinted' : /ebay\./.test(url) ? 'eBay' : (() => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return 'Site'; } })());
 
 $('#btnAdd').onclick = async () => {
   const variants = $('#fQuery').value.split(',').map((x) => x.trim()).filter(Boolean);
   const cat = $('#fCat').value;
   const custom = $('#fUrl').value.trim();
-  const sites = [...document.querySelectorAll('.sites input:checked')].map((i) => i.value);
-  if (!variants.length && !custom) return toast('Écris ce que tu cherches');
+  const sites = [...document.querySelectorAll('#siteChips input:checked')].map((i) => i.value);
+  const g = groupOf(cat);
+  const city = g.city ? $('#fCity').value.trim() : '';
+  if (!custom && g.cityRequired && !city) return toast('Indique la ville');
+  if (!variants.length && !custom && (cat === 'tout' || !['immobilier', 'vehicules'].includes(g.id))) return toast('Écris ce que tu cherches');
   const group = crypto.randomUUID();
   const base = {
-    group, name: variants[0] || (custom ? siteOf(custom) : 'Recherche'), cat, min: $('#fMin').value, max: $('#fMax').value,
+    group, city, name: variants[0] || (custom ? siteOf(custom) : CATS[cat].label + (city ? ' · ' + city : '')), cat, min: $('#fMin').value, max: $('#fMax').value,
     include: variants.join(', '), exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked,
   };
   const list = [];
@@ -70,10 +56,10 @@ $('#btnAdd').onclick = async () => {
     list.push({ ...base, url: custom, site: siteOf(custom) });
   } else {
     if (!sites.length) return toast('Choisis au moins un site');
-    sites.forEach((s) => list.push({ ...base, site: SITE_NAMES[s], url: buildUrl(s, variants[0], cat, base.min, base.max) }));
+    sites.forEach((s) => list.push({ ...base, site: SITE_NAMES[s], url: buildUrl(s, variants[0], cat, base.min, base.max, city) }));
   }
   await act('addWatches', list);
-  ['#fQuery', '#fMin', '#fMax', '#fExclude', '#fUrl'].forEach((s) => ($(s).value = ''));
+  ['#fQuery', '#fMin', '#fMax', '#fExclude', '#fUrl', '#fCity'].forEach((s) => ($(s).value = ''));
   toast('Surveillance lancée');
   go('pings');
 };
@@ -123,7 +109,7 @@ function renderGroups() {
     const price = w0.min || w0.max ? ` · ${w0.min ? 'de ' + w0.min + ' €' : ''}${w0.min && w0.max ? ' ' : ''}${w0.max ? "jusqu'à " + w0.max + ' €' : ''}` : '';
     return `<div class="g">
       <div class="top"><div>
-        <h3>${esc(w0.include || w0.name)}</h3>${/leboncoin|facebook|vinted|ebay/.test(w0.url) ? '' : `<div class="f">Lien perso : ${esc(w0.url.slice(0, 60))}…</div>`}
+        <h3>${esc(w0.include || w0.name)}${w0.city ? ' · ' + esc(w0.city) : ''}</h3>${/leboncoin|facebook|vinted|ebay/.test(w0.url) ? '' : `<div class="f">Lien perso : ${esc(w0.url.slice(0, 60))}…</div>`}
         <div class="f">${esc(CATS[w0.cat]?.label || '')}${price} · toutes les ${w0.interval >= 60 ? w0.interval / 60 + ' min' : w0.interval + ' s'}${w0.exclude ? ' · sans : ' + esc(w0.exclude) : ''}</div>
         <div class="f">${total} nouvelle(s) annonce(s) trouvée(s)</div>
       </div>

@@ -92,6 +92,7 @@ a.link{color:var(--acc)}
     <form class="card" id="newForm">
       <label>Nom<input id="fName" placeholder="PS5 pas chère"></label>
       <label>Catégorie<select id="fCat"></select></label>
+      <label id="cityBox" hidden>Où ? <span id="cityHint" style="color:#6b7385">Ville</span><input id="fCity" placeholder="ex : Melun"></label>
       <label>Mots-clés<input id="fQuery" placeholder="ps5, switch oled, yamaha mt07…"></label>
       <div class="row2">
         <label>Prix min (€)<input id="fMin" type="number" inputmode="numeric" placeholder="0"></label>
@@ -100,12 +101,8 @@ a.link{color:var(--acc)}
       <label class="chip" style="border-radius:12px;margin-bottom:12px"><input type="checkbox" id="fStrict" checked> Uniquement l'objet (ignorer accessoires et jeux vendus seuls)</label>
       <label>Exclure les annonces contenant<input id="fExclude" placeholder="cassé, hs, pièces, échange"></label>
       <label>Fréquence<select id="fInterval"><option value="30">30 s (rapide)</option><option value="45">45 s</option><option value="60" selected>1 min (recommandé)</option><option value="120">2 min</option><option value="300">5 min</option></select></label>
-      <div class="chips">
-        <label class="chip"><input type="checkbox" value="lbc" checked> Leboncoin</label>
-        <label class="chip"><input type="checkbox" value="fb" checked> Marketplace</label>
-        <label class="chip"><input type="checkbox" value="vinted"> Vinted</label>
-        <label class="chip"><input type="checkbox" value="ebay"> eBay</label>
-      </div>
+      <div class="chips" id="siteChips"></div>
+      <p class="muted" id="specHint" style="margin:-4px 0 12px"></p>
       <label style="border-top:1px solid var(--line);padding-top:12px">Ou le lien d'une recherche sur n'importe quel site<input id="fUrl" type="url" inputmode="url" placeholder="https://www.site-d-annonces.fr/recherche?..." autocapitalize="off"></label>
       <button class="primary">Envoyer au Mac</button>
       <p class="muted" style="margin-top:10px">Le ping est créé sur ton Mac, qui fait la surveillance avec tes connexions. Il apparaît dans « Mes pings » en quelques secondes.</p>
@@ -139,14 +136,10 @@ a.link{color:var(--acc)}
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="catalog.js"></script>
 <script>
 const NTFY = 'https://ntfy.sh/';
-const CATS = {
-  consoles: { label: 'Consoles & jeux vidéo', lbc: 43 }, voitures: { label: 'Voitures', lbc: 2 },
-  motos: { label: 'Motos', lbc: 3 }, telephones: { label: 'Téléphones', lbc: 17 },
-  informatique: { label: 'Informatique', lbc: 15 }, tout: { label: 'Toutes catégories', lbc: null },
-};
-const SITE_NAMES = { lbc: 'Leboncoin', fb: 'Marketplace', vinted: 'Vinted', ebay: 'eBay' };
+const { CATS, SITE_NAMES, groupOf, buildUrl, fillSelect } = window.PING_CATALOG;
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} }, del(k) { try { localStorage.removeItem(k); } catch {} } };
@@ -280,45 +273,34 @@ $('#pings').onclick = async (e) => {
 };
 
 // ---------- Création ----------
-$('#fCat').innerHTML = Object.entries(CATS).map(([k, c]) => `<option value="${k}">${c.label}</option>`).join('');
-function buildUrl(site, q, catKey, min, max) {
-  const cat = CATS[catKey]; const query = q || (catKey !== 'tout' ? cat.label : ''); let u;
-  if (site === 'lbc') {
-    u = new URL('https://www.leboncoin.fr/recherche');
-    if (cat.lbc) u.searchParams.set('category', cat.lbc);
-    if (q) u.searchParams.set('text', q);
-    if (min || max) u.searchParams.set('price', `${min || 'min'}-${max || 'max'}`);
-    u.searchParams.set('sort', 'time'); u.searchParams.set('order', 'desc');
-  } else if (site === 'fb') {
-    u = new URL('https://www.facebook.com/marketplace/search/');
-    u.searchParams.set('query', query); u.searchParams.set('sortBy', 'creation_time_descend');
-    if (min) u.searchParams.set('minPrice', min); if (max) u.searchParams.set('maxPrice', max);
-  } else if (site === 'vinted') {
-    u = new URL('https://www.vinted.fr/catalog');
-    u.searchParams.set('search_text', query); u.searchParams.set('order', 'newest_first');
-    if (min) u.searchParams.set('price_from', min); if (max) u.searchParams.set('price_to', max);
-  } else {
-    u = new URL('https://www.ebay.fr/sch/i.html');
-    u.searchParams.set('_nkw', query); u.searchParams.set('_sop', '10');
-    if (min) u.searchParams.set('_udlo', min); if (max) u.searchParams.set('_udhi', max);
-  }
-  return u.toString();
+fillSelect($('#fCat'), 'consoles');
+function onCatChange() {
+  const g = groupOf($('#fCat').value);
+  $('#siteChips').innerHTML = g.sites.map((s) => `<label class="chip"><input type="checkbox" value="${s}" ${g.defaults.includes(s) ? 'checked' : ''}> ${SITE_NAMES[s]}</label>`).join('');
+  $('#specHint').textContent = g.links.length ? 'Aussi pour cette catégorie : ' + g.links.map((l) => l[0]).join(', ') + ' (ajoute-les depuis Ping sur ton ordi avec « Surveiller cette page », ou colle le lien ci-dessous).' : '';
+  $('#cityBox').hidden = !g.city;
+  $('#cityHint').textContent = g.cityRequired ? '(obligatoire)' : '(facultatif)';
+  $('#fStrict').checked = !!g.strict;
 }
+$('#fCat').onchange = onCatChange;
+onCatChange();
 $('#newForm').onsubmit = async (e) => {
   e.preventDefault();
   const q = $('#fQuery').value.trim(), cat = $('#fCat').value;
-  const sites = [...document.querySelectorAll('.chips input:checked')].map((i) => i.value);
+  const sites = [...document.querySelectorAll('#siteChips input:checked')].map((i) => i.value);
+  const g = groupOf(cat); const city = g.city ? $('#fCity').value.trim() : '';
   const custom = $('#fUrl').value.trim();
   if (custom && !/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/|$)/i.test(custom)) return toast('Le lien doit commencer par https://');
   if (!custom && !sites.length) return toast('Choisis au moins un site');
-  if (!custom && !q && cat === 'tout') return toast('Ajoute des mots-clés ou une catégorie');
-  const base = { group: crypto.randomUUID(), include: q, name: $('#fName').value.trim() || q.split(',')[0].trim() || CATS[cat].label, cat, min: $('#fMin').value, max: $('#fMax').value, exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked };
+  if (!custom && g.cityRequired && !city) return toast('Indique la ville');
+  if (!custom && !q && (cat === 'tout' || !['immobilier', 'vehicules'].includes(g.id))) return toast('Écris ce que tu cherches');
+  const base = { group: crypto.randomUUID(), city, include: q, name: $('#fName').value.trim() || q.split(',')[0].trim() || CATS[cat].label, cat, min: $('#fMin').value, max: $('#fMax').value, exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked };
   const q1 = q.split(',')[0].trim();
   const host = (() => { try { return new URL(custom).hostname.replace(/^www\./, ''); } catch { return ''; } })();
-  const list = custom ? [{ ...base, name: base.name || host, site: host, url: custom }] : sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, base.min, base.max) }));
+  const list = custom ? [{ ...base, name: base.name || host, site: host, url: custom }] : sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, base.min, base.max, city) }));
   if (await send('addWatches', list)) {
     toast('Ping envoyé au Mac');
-    ['#fName', '#fQuery', '#fMin', '#fMax', '#fExclude', '#fUrl'].forEach((s) => ($(s).value = ''));
+    ['#fName', '#fQuery', '#fMin', '#fMax', '#fExclude', '#fUrl', '#fCity'].forEach((s) => ($(s).value = ''));
     go('pings');
   }
 };

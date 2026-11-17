@@ -323,7 +323,7 @@ function doAction(type, p, fromWeb = false) {
       const list = (Array.isArray(p) ? p : []).filter((w) => w && ALLOWED_URL.test(w.url || '')).slice(0, 8).map((w) => ({
         group: String(w.group || '').slice(0, 64) || undefined, name: String(w.name || 'Ping').slice(0, 60), site: String(w.site || '').slice(0, 20), cat: String(w.cat || 'tout'),
         url: w.url, min: w.min ?? '', max: w.max ?? '', include: String(w.include || ''), exclude: String(w.exclude || '').slice(0, 300),
-        interval: Math.max(MIN_INTERVAL, +w.interval || 60), strict: !!w.strict,
+        interval: Math.max(MIN_INTERVAL, +w.interval || 60), strict: !!w.strict, city: String(w.city || '').slice(0, 60),
         id: crypto.randomUUID(), seen: [], primed: false, count: 0, status: 'pending', active: true,
       }));
       state.watches.push(...list); save(); scheduleAll(); break;

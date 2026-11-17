@@ -14,6 +14,7 @@
   input:focus{outline:none;border-color:#39ff88}
   .quick button{font-size:12px;padding:4px 9px}
   webview{width:100%;height:calc(100% - 53px)}
+  body.panel webview{height:calc(100% - 107px)}
 </style>
 </head>
 <body>
@@ -29,6 +30,16 @@
       <button data-u="https://www.ebay.fr">eBay</button>
     </span>
     <button id="ext" title="Ouvrir dans ton navigateur">Ouvrir ↗</button>
+    <button id="watch" style="background:#39ff88;color:#04120a;border:0;font-weight:700">➕ Surveiller cette page</button>
+  </div>
+  <div id="panel" hidden style="padding:10px 12px;border-bottom:1px solid #1f2430;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#12151d">
+    <span style="color:#8a93a6">Surveiller cette recherche :</span>
+    <input id="wName" placeholder="Nom (ex : 208 diesel)" style="flex:0 1 200px">
+    <input id="wKw" placeholder="Mots obligatoires (facultatif)" style="flex:0 1 220px">
+    <input id="wMax" type="number" placeholder="Prix max (facultatif)" style="flex:0 1 150px">
+    <button id="wOk" style="background:#39ff88;color:#04120a;border:0;font-weight:700">Lancer la surveillance</button>
+    <button id="wCancel">Annuler</button>
+    <span id="wMsg" style="color:#39ff88"></span>
   </div>
   <webview id="wv" partition="persist:ping" allowpopups></webview>
 <script>
@@ -44,6 +55,23 @@
   document.getElementById('fwd').onclick = () => wv.canGoForward() && wv.goForward();
   document.getElementById('reload').onclick = () => wv.reload();
   document.getElementById('ext').onclick = () => window.ping.action('openExternal', wv.getURL());
+  const panel = document.getElementById('panel');
+  document.getElementById('watch').onclick = () => {
+    panel.hidden = false; document.body.classList.add('panel');
+    document.getElementById('wName').value = (wv.getTitle() || '').split(/[-|–]/)[0].trim().slice(0, 50);
+    document.getElementById('wMsg').textContent = '';
+  };
+  document.getElementById('wCancel').onclick = () => { panel.hidden = true; document.body.classList.remove('panel'); };
+  document.getElementById('wOk').onclick = async () => {
+    const url = wv.getURL();
+    if (!/^https:\/\//.test(url)) return;
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    const site = /leboncoin\./.test(host) ? 'Leboncoin' : /facebook\./.test(host) ? 'Marketplace' : /vinted\./.test(host) ? 'Vinted' : /ebay\./.test(host) ? 'eBay' : host;
+    const name = document.getElementById('wName').value.trim() || site;
+    await window.ping.action('addWatches', [{ group: crypto.randomUUID(), name, site, cat: 'tout', url, min: '', max: document.getElementById('wMax').value, include: document.getElementById('wKw').value.trim(), exclude: '', interval: 60, strict: false }]);
+    document.getElementById('wMsg').textContent = '✓ Surveillance lancée : retrouve-la dans « Mes recherches ».';
+    setTimeout(() => document.getElementById('wCancel').click(), 2500);
+  };
   document.querySelectorAll('[data-u]').forEach((b) => (b.onclick = () => go(b.dataset.u)));
 </script>
 </body>

@@ -22,9 +22,9 @@ fillSelect($('#fCat'), 'consoles');
 function onCatChange() {
   const g = groupOf($('#fCat').value);
   $('#siteChips').innerHTML = g.sites.map((s) => `<label class="chip"><input type="checkbox" value="${s}" ${g.defaults.includes(s) ? 'checked' : ''}> ${SITE_NAMES[s]}</label>`).join('');
-  $('#specBox').hidden = !g.links.length;
+  $('#specBox').style.display = g.links.length ? '' : 'none';
   $('#specLinks').innerHTML = g.links.map(([n, u]) => `<button class="mini" data-spec="${u}">${n} ↗</button>`).join('');
-  $('#cityBox').hidden = !g.city;
+  $('#cityBox').style.display = g.city ? '' : 'none';
   $('#cityHint').textContent = g.cityRequired ? 'Ville (obligatoire, ex : Melun)' : 'Ville (facultatif, ex : Melun)';
   $('#fStrict').checked = !!g.strict;
   $('#qHint').textContent = g.id === 'immobilier' ? 'Facultatif : ex. « T3, balcon »' : 'Plusieurs variantes possibles, séparées par des virgules';

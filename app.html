@@ -278,7 +278,7 @@ function onCatChange() {
   const g = groupOf($('#fCat').value);
   $('#siteChips').innerHTML = g.sites.map((s) => `<label class="chip"><input type="checkbox" value="${s}" ${g.defaults.includes(s) ? 'checked' : ''}> ${SITE_NAMES[s]}</label>`).join('');
   $('#specHint').textContent = g.links.length ? 'Aussi pour cette catégorie : ' + g.links.map((l) => l[0]).join(', ') + ' (ajoute-les depuis Ping sur ton ordi avec « Surveiller cette page », ou colle le lien ci-dessous).' : '';
-  $('#cityBox').hidden = !g.city;
+  $('#cityBox').style.display = g.city ? '' : 'none';
   $('#cityHint').textContent = g.cityRequired ? '(obligatoire)' : '(facultatif)';
   $('#fStrict').checked = !!g.strict;
 }

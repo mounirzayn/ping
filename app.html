@@ -32,6 +32,7 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);m
 .hit .p{color:var(--acc);font-weight:800;font-size:18px}
 .hit .t{font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hit .m{color:var(--mut);font-size:12px;margin-top:3px}
+.hit{position:relative}.hit .x{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:99px;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:13px}
 .hit.fresh{border-color:var(--acc);animation:pop .6s}
 @keyframes pop{from{transform:scale(.97);box-shadow:0 0 0 4px rgba(57,255,136,.3)}to{transform:none}}
 .w{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
@@ -77,7 +78,7 @@ a.link{color:var(--acc)}
 </header>
 <main>
   <div class="view on" id="v-feed">
-    <h2>Flux en direct</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center"><h2>Flux en direct</h2><button class="b" id="clearFeed" style="padding:5px 10px;font-size:12px">Tout effacer</button></div>
     <div id="feed"></div>
   </div>
 
@@ -96,6 +97,7 @@ a.link{color:var(--acc)}
         <label>Prix min (€)<input id="fMin" type="number" inputmode="numeric" placeholder="0"></label>
         <label>Prix max (€)<input id="fMax" type="number" inputmode="numeric" placeholder="350"></label>
       </div>
+      <label class="chip" style="border-radius:12px;margin-bottom:12px"><input type="checkbox" id="fStrict" checked> Uniquement l'objet (ignorer accessoires et jeux vendus seuls)</label>
       <label>Exclure les annonces contenant<input id="fExclude" placeholder="cassé, hs, pièces, échange"></label>
       <label>Fréquence<select id="fInterval"><option value="30">30 s (rapide)</option><option value="45">45 s</option><option value="60" selected>1 min (recommandé)</option><option value="120">2 min</option><option value="300">5 min</option></select></label>
       <div class="chips">
@@ -151,6 +153,8 @@ const ago = (t) => { if (!t) return 'jamais'; const s = Math.max(0, Math.round((
 function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2200); }
 
 let topic = null, hits = [], etat = null, es = null, freshIds = new Set();
+let hidden = new Set(); try { hidden = new Set(JSON.parse(localStorage.getItem('pingHidden') || '[]')); } catch {}
+const saveHidden = () => { try { localStorage.setItem('pingHidden', JSON.stringify([...hidden].slice(-2000))); } catch {} };
 
 // ---------- Connexion ----------
 function boot() {
@@ -210,6 +214,12 @@ function listen() {
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && topic) { if (!es || es.readyState === 2) listen(); renderSync(); } });
 
+$('#feed').addEventListener('click', (e) => {
+  const x = e.target.closest('[data-hide]'); if (!x) return;
+  e.preventDefault(); e.stopPropagation(); hidden.add(x.dataset.hide); saveHidden(); renderFeed();
+});
+$('#clearFeed').onclick = () => { hits.forEach((h) => hidden.add(h.id)); saveHidden(); renderFeed(); toast('Annonces effacées'); };
+
 // ---------- Commandes vers le Mac ----------
 async function send(cmd, p) {
   try {
@@ -228,10 +238,12 @@ function renderSync() {
 }
 function renderFeed() {
   const el = $('#feed');
-  if (!hits.length) { el.innerHTML = `<div class="empty">Aucune nouvelle annonce sur les 12 dernières heures.<br><br>Dès que ton Mac en trouve une, elle apparaît ici instantanément.</div>`; return; }
-  el.innerHTML = hits.slice(0, 150).map((h) => `
+  const shown = hits.filter((h) => !hidden.has(h.id));
+  if (!shown.length) { el.innerHTML = `<div class="empty">Aucune nouvelle annonce sur les 12 dernières heures.<br><br>Dès que ton Mac en trouve une, elle apparaît ici instantanément.</div>`; return; }
+  el.innerHTML = shown.slice(0, 150).map((h) => `
     <a class="hit ${freshIds.has(h.id) ? 'fresh' : ''}" href="${esc(h.url)}" target="_blank" rel="noopener">
       <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : '🔔'}</div>
+      <button class="x" data-hide="${esc(h.id)}" aria-label="Supprimer">✕</button>
       <div style="min-width:0">
         <div class="p">${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : 'Prix ?'}</div>
         <div class="t">${esc(h.title)}</div>
@@ -297,7 +309,7 @@ $('#newForm').onsubmit = async (e) => {
   const sites = [...document.querySelectorAll('.chips input:checked')].map((i) => i.value);
   if (!sites.length) return toast('Choisis au moins un site');
   if (!q && cat === 'tout') return toast('Ajoute des mots-clés ou une catégorie');
-  const base = { group: crypto.randomUUID(), include: q, name: $('#fName').value.trim() || q.split(',')[0].trim() || CATS[cat].label, cat, min: $('#fMin').value, max: $('#fMax').value, exclude: $('#fExclude').value, interval: +$('#fInterval').value };
+  const base = { group: crypto.randomUUID(), include: q, name: $('#fName').value.trim() || q.split(',')[0].trim() || CATS[cat].label, cat, min: $('#fMin').value, max: $('#fMax').value, exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked };
   const q1 = q.split(',')[0].trim();
   const list = sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, base.min, base.max) }));
   if (await send('addWatches', list)) {

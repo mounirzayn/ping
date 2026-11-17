@@ -34,6 +34,11 @@ main{max-width:1180px;margin:0 auto;padding:22px 24px 60px;display:block}
 .hit .m{color:var(--mut);font-size:12px}
 .hit .go{margin-top:8px;display:flex;gap:6px}
 .hit .go button{flex:1}
+.hit .del{position:absolute;top:8px;right:8px;width:28px;height:28px;padding:0;border-radius:99px;background:rgba(0,0,0,.6);border:0;color:#fff;font-size:14px}
+.hit .del:hover{background:var(--bad);color:#fff}
+.edit{margin-top:12px;background:var(--card2);border-radius:10px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.edit .wide{grid-column:span 2}
+.edit label{min-width:0}.edit input:not([type=checkbox]){width:100%}
 /* Pings */
 .groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
 .g{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
@@ -91,7 +96,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
   <section class="view on" id="v-feed">
     <div class="head">
       <div><h1>Nouvelles annonces</h1><p>Les annonces sorties depuis que tu surveilles, de la plus récente à la plus ancienne. Clique pour ouvrir l'annonce sur le site.</p></div>
-      <button id="btnClear">Tout marquer comme vu</button>
+      <div style="display:flex;gap:8px"><button id="btnClear">Tout marquer comme vu</button><button id="btnClearAll">Effacer toutes les annonces</button></div>
     </div>
     <div class="feed" id="feed"></div>
   </section>
@@ -124,6 +129,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
         <label>Prix maximum (€)<input id="fMax" type="number" min="0" placeholder="ex : 280"></label>
         <label class="wide">Ignorer les annonces qui contiennent <small>Ex : manette, jeu, cassé, pièces</small>
           <input id="fExclude" placeholder="manette, jeu, cassé, hs, pièces, boîte vide"></label>
+        <label class="wide chip" style="border-radius:12px;justify-content:flex-start"><input type="checkbox" id="fStrict" checked> <span><b>Uniquement l'objet lui-même</b><br><small>Ignore les accessoires et jeux vendus seuls : manettes, housses, coques, câbles, « pour PS5 »…</small></span></label>
         <div class="wide"><label>Sur quels sites ?</label>
           <div class="sites" style="margin-top:6px">
             <label class="chip"><input type="checkbox" value="lbc" checked> Leboncoin</label>

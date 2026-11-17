@@ -31,6 +31,10 @@ function load() {
     state.watches.forEach((w) => { w.seen = []; w.primed = false; w.count = 0; });
     state.v2 = true;
   }
+  if (!state.v3) { // filtre « uniquement l'objet » activé par défaut sur les catégories où les accessoires polluent
+    state.watches.forEach((w) => { if (w.strict === undefined) w.strict = ['consoles', 'telephones', 'informatique'].includes(w.cat); });
+    state.v3 = true;
+  }
   if (!state.ntfyTopic) state.ntfyTopic = 'ping-' + crypto.randomBytes(9).toString('hex');
   save();
 }
@@ -209,12 +213,22 @@ function keywordsOf(w) {
   if (w.include) return w.include;
   try { const u = new URL(w.url); return u.searchParams.get('text') || u.searchParams.get('query') || u.searchParams.get('search_text') || u.searchParams.get('_nkw') || ''; } catch { return ''; }
 }
+// Mode « uniquement l'objet » : écarte les accessoires / jeux vendus seuls (FR, EN, ES, IT)
+const ACC = new Set(['manette','manettes','controller','controllers','mando','mandos','controllo','dualsense','dualshock','coque','housse','funda','etui','case','cover','skin','skins','sticker','stickers','protection','chargeur','charger','cable','cables','support','socle','dock','casque','headset','volant','jeu','jeux','game','games','gioco','giochi','juego','juegos','boite','grip','grips','joystick','pochette','sacoche','ventilateur','telecommande','remote','camera','facade','plaque','piece','pieces','carte','disque','batterie','accessoire','accessoires']);
+const words = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+function isAccessory(title, keywords) {
+  const ws = words(title);
+  if (ws.slice(0, 2).some((x) => ACC.has(x))) return true; // « Manette PS5 », « Funda rígida… »
+  const flat = ' ' + ws.join(' ') + ' ';
+  return keywords.some((k) => { const kw = words(k).join(' '); return kw && new RegExp(` (pour|para|for|per|compatible) (la |el |le |the |une |un )?${kw} `).test(flat); });
+}
 function matches(w, it) {
   if (w.min !== '' && w.min != null && it.price != null && it.price < +w.min) return false;
   if (w.max !== '' && w.max != null && it.price != null && it.price > +w.max) return false;
   const t = norm(it.title);
   const list = (s) => String(s || '').split(',').map(norm).filter(Boolean);
   if (list(w.exclude).some((x) => t.includes(x))) return false;
+  if (w.strict && isAccessory(it.title, String(keywordsOf(w)).split(','))) return false;
   const incl = list(keywordsOf(w));
   return !incl.length || incl.some((x) => t.includes(x)); // l'annonce doit contenir un des mots-clés
 }
@@ -273,7 +287,7 @@ function doAction(type, p, fromWeb = false) {
       const list = (Array.isArray(p) ? p : []).filter((w) => w && ALLOWED_URL.test(w.url || '')).slice(0, 8).map((w) => ({
         group: String(w.group || '').slice(0, 64) || undefined, name: String(w.name || 'Ping').slice(0, 60), site: String(w.site || '').slice(0, 20), cat: String(w.cat || 'tout'),
         url: w.url, min: w.min ?? '', max: w.max ?? '', include: String(w.include || ''), exclude: String(w.exclude || '').slice(0, 300),
-        interval: Math.max(MIN_INTERVAL, +w.interval || 60),
+        interval: Math.max(MIN_INTERVAL, +w.interval || 60), strict: !!w.strict,
         id: crypto.randomUUID(), seen: [], primed: false, count: 0, status: 'pending', active: true,
       }));
       state.watches.push(...list); save(); scheduleAll(); break;
@@ -283,6 +297,21 @@ function doAction(type, p, fromWeb = false) {
     case 'checkNow': if (find(p)) enqueue(() => check(p, true)); break;
     case 'pauseAll': { const any = state.watches.some((w) => w.active); state.watches.forEach((w) => (w.active = !any)); save(); scheduleAll(); break; }
     case 'refresh': pushState(); break;
+    case 'deleteHit': { const ids = new Set([].concat(p)); const before = state.hits.length; state.hits = state.hits.filter((h, i) => { const del = ids.has(h.id); if (del && i < state.unread) state.unread--; return !del; }); state.unread = Math.max(0, Math.min(state.unread, state.hits.length)); if (state.hits.length !== before) save(); break; }
+    case 'clearHits': state.hits = []; state.unread = 0; save(); break;
+    case 'updateGroup': {
+      const ids = new Set([].concat(p && p.ids || []));
+      state.watches.filter((w) => ids.has(w.id)).forEach((w) => {
+        if (p.exclude !== undefined) w.exclude = String(p.exclude).slice(0, 600);
+        if (p.include !== undefined && String(p.include).trim()) w.include = String(p.include).slice(0, 200);
+        if (p.min !== undefined) w.min = p.min; if (p.max !== undefined) w.max = p.max;
+        if (p.strict !== undefined) w.strict = !!p.strict;
+        w.url = rewriteUrl(w.url, String(w.include || '').split(',')[0].trim(), w.min, w.max);
+        w.seen = []; w.primed = false; // nouvelle base pour ne pas notifier d'anciennes annonces
+      });
+      scheduleAll();
+      save(); break;
+    }
     case 'clearUnread': if (!fromWeb) { state.unread = 0; save(); } break;
     case 'testPush': if (!fromWeb) notify({ title: '🔔 Test Ping', message: 'Si tu vois ce message, tes alertes sont prêtes.', url: 'https://ntfy.sh' }); break;
     case 'setTopic': if (!fromWeb) { state.ntfyTopic = p; save(); listenCmds(); pushState(); } break;
@@ -293,6 +322,18 @@ function doAction(type, p, fromWeb = false) {
   return true;
 }
 ipcMain.handle('action', async (_e, type, p) => doAction(type, p));
+
+// Met à jour la recherche et les prix directement dans l'adresse du site
+function rewriteUrl(url, q, min, max) {
+  try {
+    const u = new URL(url); const set = (k, v) => (v !== '' && v != null ? u.searchParams.set(k, v) : u.searchParams.delete(k));
+    if (/leboncoin/.test(u.host)) { if (q) set('text', q); set('price', min || max ? `${min || 'min'}-${max || 'max'}` : ''); }
+    else if (/facebook/.test(u.host)) { if (q) set('query', q); set('minPrice', min); set('maxPrice', max); }
+    else if (/vinted/.test(u.host)) { if (q) set('search_text', q); set('price_from', min); set('price_to', max); }
+    else if (/ebay/.test(u.host)) { if (q) set('_nkw', q); set('_udlo', min); set('_udhi', max); }
+    return u.toString();
+  } catch { return url; }
+}
 
 // ---------- Synchro avec l'espace web (via ntfy, sans serveur) ----------
 // Le Mac publie un résumé de ses pings sur <canal>-etat et écoute les commandes sur <canal>-cmd.

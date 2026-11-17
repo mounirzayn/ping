@@ -62,7 +62,7 @@ $('#btnAdd').onclick = async () => {
   const group = crypto.randomUUID();
   const base = {
     group, name: variants[0] || 'Recherche', cat, min: $('#fMin').value, max: $('#fMax').value,
-    include: variants.join(', '), exclude: $('#fExclude').value, interval: +$('#fInterval').value,
+    include: variants.join(', '), exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked,
   };
   const list = [];
   if (custom) {
@@ -88,7 +88,7 @@ function renderFeed() {
   }
   el.innerHTML = S.hits.slice(0, 200).map((h, i) => `
     <div class="hit ${i < S.unread ? 'new' : ''}">
-      <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : 'Pas de photo'}<span class="site s-${esc(h.site)}">${esc(h.site)}</span></div>
+      <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : 'Pas de photo'}<span class="site s-${esc(h.site)}">${esc(h.site)}</span><button class="del" data-del="${esc(h.id)}" title="Supprimer cette annonce">✕</button></div>
       <div class="b">
         <div class="p">${eur(h.price)}</div>
         <div class="t">${esc(h.title)}</div>
@@ -98,6 +98,8 @@ function renderFeed() {
     </div>`).join('');
 }
 $('#feed').onclick = (e) => {
+  const d = e.target.closest('[data-del]');
+  if (d) { e.stopPropagation(); act('deleteHit', d.dataset.del); return; }
   const b = e.target.closest('[data-ext]');
   const card = e.target.closest('.hit');
   const url = b ? b.dataset.ext : card ? card.querySelector('[data-ext]').dataset.ext : null;
@@ -125,7 +127,16 @@ function renderGroups() {
         <div class="f">${esc(CATS[w0.cat]?.label || '')}${price} · toutes les ${w0.interval >= 60 ? w0.interval / 60 + ' min' : w0.interval + ' s'}${w0.exclude ? ' · sans : ' + esc(w0.exclude) : ''}</div>
         <div class="f">${total} nouvelle(s) annonce(s) trouvée(s)</div>
       </div>
-      <button class="mini" data-gdel="${esc(ws.map((w) => w.id).join(','))}">Supprimer</button></div>
+      <div style="display:flex;gap:6px"><button class="mini" data-gedit="${esc(ws.map((w) => w.id).join(','))}">Modifier</button><button class="mini" data-gdel="${esc(ws.map((w) => w.id).join(','))}">Supprimer</button></div></div>
+      ${w0.strict ? '<div class="f" style="color:var(--acc)">✓ Uniquement l\'objet (accessoires ignorés)</div>' : ''}
+      <div class="edit" data-editbox="${esc(ws.map((w) => w.id).join(','))}" hidden>
+        <label class="wide">Mots-clés<input data-k="include" value="${esc(w0.include || w0.name)}"></label>
+        <label>Prix min (€)<input data-k="min" type="number" value="${esc(w0.min)}"></label>
+        <label>Prix max (€)<input data-k="max" type="number" value="${esc(w0.max)}"></label>
+        <label class="wide">Ignorer les annonces qui contiennent<input data-k="exclude" value="${esc(w0.exclude)}" placeholder="ex : housse, jeu, cassé"></label>
+        <label class="wide" style="flex-direction:row;align-items:center;gap:8px;color:var(--txt)"><input type="checkbox" data-k="strict" ${w0.strict ? 'checked' : ''}> Uniquement l'objet lui-même (ignorer accessoires et jeux)</label>
+        <div class="wide"><button class="mini" data-gsave="${esc(ws.map((w) => w.id).join(','))}" style="background:var(--acc);color:#04120a;border:0;font-weight:700">Enregistrer</button></div>
+      </div>
       <div class="rows">${ws.map((w) => `
         <div class="row">
           <span class="dot ${w.active ? esc(w.status) : ''}"></span>
@@ -141,7 +152,17 @@ function renderGroups() {
     </div>`;
   }).join('');
 }
+let editing = false;
 $('#groups').onclick = async (e) => {
+  const ed = e.target.closest('[data-gedit]');
+  if (ed) { const box = document.querySelector(`[data-editbox="${ed.dataset.gedit}"]`); box.hidden = !box.hidden; editing = !box.hidden; return; }
+  const sv = e.target.closest('[data-gsave]');
+  if (sv) {
+    const box = document.querySelector(`[data-editbox="${sv.dataset.gsave}"]`);
+    const v = (k) => box.querySelector(`[data-k="${k}"]`);
+    await act('updateGroup', { ids: sv.dataset.gsave.split(','), include: v('include').value, min: v('min').value, max: v('max').value, exclude: v('exclude').value, strict: v('strict').checked });
+    editing = false; toast('Recherche mise à jour'); render(); return;
+  }
   const del = e.target.closest('[data-gdel]');
   if (del) {
     if (del.dataset.sure !== '1') { del.dataset.sure = '1'; del.textContent = 'Confirmer ?'; return; }
@@ -158,7 +179,7 @@ $('#groups').onclick = async (e) => {
 // ---------- Rendu global ----------
 function render(s) {
   if (s) S = s;
-  renderFeed(); renderGroups();
+  renderFeed(); if (!editing) renderGroups();
   const active = S.watches.filter((w) => w.active);
   const blocked = active.filter((w) => w.status === 'blocked').length;
   const dot = $('#globalDot'), txt = $('#globalTxt');
@@ -177,6 +198,11 @@ const webLink = () => (S.siteUrl || '') + 'app.html#' + S.ntfyTopic;
 $('#btnWeb').onclick = () => act('openExternal', webLink());
 $('#btnWebCopy').onclick = () => { navigator.clipboard.writeText(webLink()); toast('Lien copié'); };
 $('#btnClear').onclick = () => act('clearUnread');
+$('#btnClearAll').onclick = (e) => {
+  const b = e.currentTarget;
+  if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Confirmer : tout effacer ?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Effacer toutes les annonces'; }, 4000); return; }
+  act('clearHits'); toast('Annonces effacées');
+};
 $('#btnCopy').onclick = () => { navigator.clipboard.writeText($('#topic').textContent); toast('Code copié'); };
 $('#btnTest').onclick = () => { act('testPush'); toast('Alerte de test envoyée'); };
 $('#btnPause').onclick = () => act('pauseAll');

@@ -7,32 +7,14 @@ on:
 permissions:
   contents: write
 jobs:
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
-      - name: Construire l'installeur Windows
-        working-directory: mac
-        run: |
-          npm install --no-audit --no-fund
-          npx electron-builder --win --x64 --publish never
-      - name: Publier la version
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Ping 1.0.${{ github.run_number }}
-          body: "Mac : télécharge Ping-Mac.zip, dézippe, puis clic droit sur « Installer Ping.command » > Ouvrir. Windows : lance Ping-Windows-Setup.exe (si Windows affiche un avertissement : Informations complémentaires > Exécuter quand même)."
-          files: mac/dist/Ping-Windows-Setup.exe
-          make_latest: true
-  build:
+  mac:
     runs-on: macos-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - name: Construire l'appli
+      - name: Construire l'appli Mac
         working-directory: mac
         run: |
           npm install --no-audit --no-fund
@@ -42,26 +24,51 @@ jobs:
         run: |
           mkdir -p Ping-Mac
           cp -R mac/dist/mac-arm64/Ping.app Ping-Mac/
-          cat > "Ping-Mac/Installer Ping.command" <<'SH'
-          #!/bin/bash
-          cd "$(dirname "$0")"
-          echo "Installation de Ping..."
-          osascript -e 'quit app "Ping"' 2>/dev/null
-          rm -rf "/Applications/Ping.app"
-          cp -R "Ping.app" "/Applications/Ping.app" || { echo "Impossible de copier dans Applications."; read -p "Entrée pour fermer"; exit 1; }
-          xattr -cr "/Applications/Ping.app"
-          codesign --force --deep --sign - "/Applications/Ping.app" >/dev/null 2>&1
-          echo "Ping est installé. Lancement..."
-          open "/Applications/Ping.app"
-          SH
-          sed -i '' 's/^          //' "Ping-Mac/Installer Ping.command"
+          printf '%s\n' '#!/bin/bash' \
+            'cd "$(dirname "$0")"' \
+            'echo "Installation de Ping..."' \
+            'osascript -e '"'"'quit app "Ping"'"'"' 2>/dev/null' \
+            'rm -rf "/Applications/Ping.app"' \
+            'cp -R "Ping.app" "/Applications/Ping.app" || { echo "Impossible de copier dans Applications."; read -p "Entrée pour fermer"; exit 1; }' \
+            'xattr -cr "/Applications/Ping.app"' \
+            'codesign --force --deep --sign - "/Applications/Ping.app" >/dev/null 2>&1' \
+            'echo "Ping est installé. Lancement..."' \
+            'open "/Applications/Ping.app"' > "Ping-Mac/Installer Ping.command"
           chmod +x "Ping-Mac/Installer Ping.command"
           ditto -c -k --sequesterRsrc --keepParent Ping-Mac Ping-Mac.zip
-      - name: Publier la version
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
+        with: { name: mac, path: Ping-Mac.zip }
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Construire l'installeur Windows
+        working-directory: mac
+        run: |
+          npm install --no-audit --no-fund
+          npx electron-builder --win --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: mac/dist/Ping-Windows-Setup.exe }
+
+  release:
+    needs: [mac, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - name: Version
+        id: v
+        run: echo "tag=v$(date -u +%Y.%m.%d-%H%M)" >> "$GITHUB_OUTPUT"
+      - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Ping 1.0.${{ github.run_number }}
+          tag_name: ${{ steps.v.outputs.tag }}
+          name: Ping ${{ steps.v.outputs.tag }}
           body: "Mac : télécharge Ping-Mac.zip, dézippe, puis clic droit sur « Installer Ping.command » > Ouvrir. Windows : lance Ping-Windows-Setup.exe (si Windows affiche un avertissement : Informations complémentaires > Exécuter quand même)."
-          files: Ping-Mac.zip
+          files: |
+            out/Ping-Mac.zip
+            out/Ping-Windows-Setup.exe
           make_latest: true

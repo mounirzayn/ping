@@ -51,7 +51,7 @@ function buildUrl(site, q, catKey, min, max) {
   }
   return u.toString();
 }
-const siteOf = (url) => (/leboncoin/.test(url) ? 'Leboncoin' : /facebook/.test(url) ? 'Marketplace' : /vinted/.test(url) ? 'Vinted' : /ebay/.test(url) ? 'eBay' : 'Site');
+const siteOf = (url) => (/leboncoin\./.test(url) ? 'Leboncoin' : /facebook\./.test(url) ? 'Marketplace' : /vinted\./.test(url) ? 'Vinted' : /ebay\./.test(url) ? 'eBay' : (() => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return 'Site'; } })());
 
 $('#btnAdd').onclick = async () => {
   const variants = $('#fQuery').value.split(',').map((x) => x.trim()).filter(Boolean);
@@ -61,12 +61,12 @@ $('#btnAdd').onclick = async () => {
   if (!variants.length && !custom) return toast('Écris ce que tu cherches');
   const group = crypto.randomUUID();
   const base = {
-    group, name: variants[0] || 'Recherche', cat, min: $('#fMin').value, max: $('#fMax').value,
+    group, name: variants[0] || (custom ? siteOf(custom) : 'Recherche'), cat, min: $('#fMin').value, max: $('#fMax').value,
     include: variants.join(', '), exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked,
   };
   const list = [];
   if (custom) {
-    if (!/^https:\/\/(www\.)?(leboncoin\.fr|facebook\.com|vinted\.fr|ebay\.fr)\//.test(custom)) return toast('Adresse non prise en charge');
+    if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/|$)/i.test(custom)) return toast('Colle un lien complet qui commence par https://');
     list.push({ ...base, url: custom, site: siteOf(custom) });
   } else {
     if (!sites.length) return toast('Choisis au moins un site');
@@ -123,7 +123,7 @@ function renderGroups() {
     const price = w0.min || w0.max ? ` · ${w0.min ? 'de ' + w0.min + ' €' : ''}${w0.min && w0.max ? ' ' : ''}${w0.max ? "jusqu'à " + w0.max + ' €' : ''}` : '';
     return `<div class="g">
       <div class="top"><div>
-        <h3>${esc(w0.include || w0.name)}</h3>
+        <h3>${esc(w0.include || w0.name)}</h3>${/leboncoin|facebook|vinted|ebay/.test(w0.url) ? '' : `<div class="f">Lien perso : ${esc(w0.url.slice(0, 60))}…</div>`}
         <div class="f">${esc(CATS[w0.cat]?.label || '')}${price} · toutes les ${w0.interval >= 60 ? w0.interval / 60 + ' min' : w0.interval + ' s'}${w0.exclude ? ' · sans : ' + esc(w0.exclude) : ''}</div>
         <div class="f">${total} nouvelle(s) annonce(s) trouvée(s)</div>
       </div>

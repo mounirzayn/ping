@@ -27,7 +27,7 @@ main{max-width:1180px;margin:0 auto;padding:22px 24px 60px;display:block}
 .hit.new{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
 .hit .img{aspect-ratio:4/3;background:#1a1e28 center/cover no-repeat;position:relative;display:grid;place-items:center;color:var(--mut);font-size:13px}
 .site{position:absolute;top:8px;left:8px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;color:#fff}
-.s-Leboncoin{background:#ec5a13}.s-Marketplace{background:#1877f2}.s-Vinted{background:#09848f}.s-eBay{background:#e53238}
+.site{background:#4b5263}.s-Leboncoin{background:#ec5a13}.s-Marketplace{background:#1877f2}.s-Vinted{background:#09848f}.s-eBay{background:#e53238}
 .hit .b{padding:12px 13px;display:flex;flex-direction:column;gap:4px;flex:1}
 .hit .p{color:var(--acc);font-weight:800;font-size:20px}
 .hit .t{font-size:13.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:36px}
@@ -137,8 +137,8 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
             <label class="chip"><input type="checkbox" value="vinted" checked> Vinted</label>
             <label class="chip"><input type="checkbox" value="ebay"> eBay</label>
           </div></div>
-        <details class="wide"><summary>Avancé : coller l'adresse d'une recherche déjà faite sur un site</summary>
-          <input id="fUrl" style="width:100%;margin-top:8px;box-sizing:border-box" placeholder="https://www.leboncoin.fr/recherche?..."></details>
+        <label class="wide" style="border-top:1px solid var(--line);padding-top:14px">Ou surveille une recherche sur <b style="color:var(--txt)">n'importe quel site</b> <small>Fais ta recherche sur le site (ParuVendu, Rakuten, AutoScout24…), trie par « plus récentes », puis colle le lien ici. Les cases de sites ci-dessus sont alors ignorées.</small>
+          <input id="fUrl" placeholder="https://www.site-d-annonces.fr/recherche?..."></label>
       </div>
       <div style="margin-top:20px"><button class="primary" id="btnAdd">Lancer la surveillance</button></div>
     </div>

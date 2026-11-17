@@ -106,6 +106,7 @@ a.link{color:var(--acc)}
         <label class="chip"><input type="checkbox" value="vinted"> Vinted</label>
         <label class="chip"><input type="checkbox" value="ebay"> eBay</label>
       </div>
+      <label style="border-top:1px solid var(--line);padding-top:12px">Ou le lien d'une recherche sur n'importe quel site<input id="fUrl" type="url" inputmode="url" placeholder="https://www.site-d-annonces.fr/recherche?..." autocapitalize="off"></label>
       <button class="primary">Envoyer au Mac</button>
       <p class="muted" style="margin-top:10px">Le ping est créé sur ton Mac, qui fait la surveillance avec tes connexions. Il apparaît dans « Mes pings » en quelques secondes.</p>
     </form>
@@ -307,14 +308,17 @@ $('#newForm').onsubmit = async (e) => {
   e.preventDefault();
   const q = $('#fQuery').value.trim(), cat = $('#fCat').value;
   const sites = [...document.querySelectorAll('.chips input:checked')].map((i) => i.value);
-  if (!sites.length) return toast('Choisis au moins un site');
-  if (!q && cat === 'tout') return toast('Ajoute des mots-clés ou une catégorie');
+  const custom = $('#fUrl').value.trim();
+  if (custom && !/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/|$)/i.test(custom)) return toast('Le lien doit commencer par https://');
+  if (!custom && !sites.length) return toast('Choisis au moins un site');
+  if (!custom && !q && cat === 'tout') return toast('Ajoute des mots-clés ou une catégorie');
   const base = { group: crypto.randomUUID(), include: q, name: $('#fName').value.trim() || q.split(',')[0].trim() || CATS[cat].label, cat, min: $('#fMin').value, max: $('#fMax').value, exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked };
   const q1 = q.split(',')[0].trim();
-  const list = sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, base.min, base.max) }));
+  const host = (() => { try { return new URL(custom).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+  const list = custom ? [{ ...base, name: base.name || host, site: host, url: custom }] : sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, base.min, base.max) }));
   if (await send('addWatches', list)) {
     toast('Ping envoyé au Mac');
-    ['#fName', '#fQuery', '#fMin', '#fMax', '#fExclude'].forEach((s) => ($(s).value = ''));
+    ['#fName', '#fQuery', '#fMin', '#fMax', '#fExclude', '#fUrl'].forEach((s) => ($(s).value = ''));
     go('pings');
   }
 };

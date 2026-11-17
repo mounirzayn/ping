@@ -87,8 +87,6 @@ function extractListings() {
     [/vinted\.[a-z.]+\/items\/(\d+)/, 'Vinted'],
     [/ebay\.[a-z.]+\/itm\/(?:[^/]+\/)?(\d{9,})/, 'eBay'],
   ];
-  const idOf = (href) => { for (const [p, s] of pats) { const m = href.match(p); if (m) return [m[1], s]; } return [null, null]; };
-  const isItem = (el) => !!idOf(el.href || '')[0];
   // Prix : "20 €", "1 350 €", "230.00 €", "21,70 €", "€200", "EUR 12,00"
   const priceRe = /(?:€|EUR)\s?(\d{1,3}(?:[\s  .]\d{3})*|\d+)(?:[.,](\d{1,2}))?|(\d{1,3}(?:[\s  .]\d{3})*|\d+)(?:[.,](\d{1,2}))?\s?(?:€|EUR)/;
   const parsePrice = (t) => {
@@ -97,16 +95,44 @@ function extractListings() {
     const ent = (m[1] || m[3]).replace(/[\s  .]/g, ''); const dec = m[2] || m[4] || '0';
     return parseFloat(ent + '.' + dec);
   };
+  const known = (href) => { for (const [p, s] of pats) { const m = href.match(p); if (m) return [s + ':' + m[1], s]; } return null; };
+
+  // Site inconnu : on repère le "modèle" de lien qui revient le plus souvent à côté d'un prix
+  let generic = null;
+  const anchors = [...document.querySelectorAll('a[href]')];
+  if (!anchors.some((a) => known(a.href))) {
+    const shape = (p) => { const seg = p.split('/').filter(Boolean); const last = seg[seg.length - 1] || ''; return seg.length + ':' + seg.slice(0, -1).map((x) => (/\d{3,}/.test(x) || x.length > 24 ? '*' : x)).join('/') + ':' + (/\d{4,}/.test(last) ? '#' : last.length > 24 ? 'L' : 'w'); };
+    const groups = new Map();
+    for (const a of anchors) {
+      if (a.host !== location.host || a.pathname.length < 3 || /^(#|javascript|mailto|tel)/i.test(a.getAttribute('href') || '')) continue;
+      if (/\/(login|connexion|compte|account|panier|cart|aide|help|cgu|contact)/i.test(a.pathname)) continue;
+      const k = shape(a.pathname);
+      if (!groups.has(k)) groups.set(k, new Set());
+      groups.get(k).add(a.pathname);
+    }
+    let best = null, bestScore = 0;
+    for (const [k, paths] of groups) {
+      if (paths.size < 3) continue;
+      const withPrice = [...paths].filter((p) => { const a = anchors.find((x) => x.pathname === p); let c = a; for (let n = 0; n < 4 && c.parentElement; n++) c = c.parentElement; return priceRe.test(c.innerText || ''); }).length;
+      const score = withPrice * 2 + paths.size;
+      if (withPrice >= Math.min(3, paths.size) && score > bestScore) { best = k; bestScore = score; }
+    }
+    if (best) generic = groups.get(best);
+  }
+  const host = location.hostname.replace(/^www\./, '');
+  const keyOf = (a) => { const k = known(a.href); if (k) return k; if (generic && a.host === location.host && generic.has(a.pathname)) return ['Web:' + host + a.pathname, host]; return null; };
+
   const bad = /^(voir l.annonce|see listing|sponsoris|nouveau|new|\d+([.,]\d)?\s*\(\d+\)|prix|située|livraison|pro|urgent|à la une)/i;
   const out = new Map();
-  for (const a of document.querySelectorAll('a[href]')) {
-    const [rawId, site] = idOf(a.href);
-    if (!rawId || out.has(rawId)) continue;
+  for (const a of anchors) {
+    const key = keyOf(a);
+    if (!key || out.has(key[0])) continue;
+    const [id, site] = key;
     // Carte = plus grand parent qui ne contient que cette annonce
     let card = a;
     while (card.parentElement && card.parentElement !== document.body) {
       const p = card.parentElement;
-      const ids = new Set([...p.querySelectorAll('a[href]')].filter(isItem).map((x) => idOf(x.href)[0]));
+      const ids = new Set([...p.querySelectorAll('a[href]')].map((x) => (keyOf(x) || [null])[0]).filter(Boolean));
       if (ids.size > 1) break;
       card = p;
     }
@@ -122,13 +148,15 @@ function extractListings() {
     const srTitle = ([...card.querySelectorAll('span,h2,h3')].map((e) => e.textContent.trim()).find((t) => /^(voir l.annonce|see listing)\s*:\s*\S/i.test(t)) || '').replace(/^[^:]+:\s*/, '');
     const attrTitle = srTitle || [a.getAttribute('title'), a.getAttribute('aria-label')].find((t) => t && t.length > 8 && !bad.test(t)) || '';
     const imgAlt = [...card.querySelectorAll('img[alt]')].map((i) => i.alt).find((t) => t && t.length > 8 && !/avatar|profil|logo/i.test(t)) || '';
+    const heading = ([...card.querySelectorAll('h1,h2,h3,h4,[class*="title" i]')].map((e) => e.innerText.trim()).find((t) => t.length > 3 && !priceRe.test(t) && !bad.test(t)) || '');
     const lines = (card.innerText || '').split('\n').map((l) => l.trim()).filter((l) => l.length > 3 && !bad.test(l) && !priceRe.test(l) && !/\b\d{5}\b/.test(l));
     const fromLines = lines.sort((x, y) => y.length - x.length)[0] || '';
-    let title = (attrTitle || imgAlt || fromLines).split(/,\s*(?:Marque|État|Taille|Brand|Condition)\s*:/)[0].replace(/,\s*\d[\d.,\s]*\s?€.*$/, '').trim();
+    let title = (attrTitle || (site.includes('.') ? heading : '') || imgAlt || heading || fromLines).split(/,\s*(?:Marque|État|Taille|Brand|Condition)\s*:/)[0].replace(/,\s*\d[\d.,\s]*\s?€.*$/, '').trim();
     if (!title) continue;
+    if (site.includes('.') && !img && !priceRe.test(card.innerText || '')) continue; // lien de filtre, pas une annonce
     const price = parsePrice(attrTitle) ?? parsePrice(imgAlt) ?? parsePrice(card.innerText);
-    const url = a.href.split('?')[0].split('#')[0];
-    out.set(rawId, { id: site + ':' + rawId, site, url, title: title.slice(0, 140), price, img });
+    const url = known(a.href) ? a.href.split('?')[0].split('#')[0] : a.href.split('#')[0];
+    out.set(id, { id, site, url, title: title.slice(0, 140), price, img });
   }
   const head = (document.title + ' ' + (document.body ? document.body.innerText.slice(0, 600) : '')).toLowerCase();
   const blocked = /captcha|datadome|verify you are human|vous êtes un robot|accès temporairement restreint|log in to continue|connecte-toi pour|se connecter à facebook/.test(head);
@@ -279,7 +307,8 @@ app.on('web-contents-created', (_e, wc) => {
 
 // ---------- Actions depuis l'interface ----------
 ipcMain.handle('getState', () => publicState());
-const ALLOWED_URL = /^https:\/\/(www\.)?(leboncoin\.fr|facebook\.com|vinted\.fr|ebay\.fr)\//;
+// N'importe quel site d'annonces en https (pas d'adresse locale ni d'IP)
+const ALLOWED_URL = /^https:\/\/(?!localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[|\d+\.\d+\.\d+\.\d+)[a-z0-9.-]+\.[a-z]{2,}(\/|$)/i;
 function doAction(type, p, fromWeb = false) {
   const find = (id) => state.watches.find((w) => w.id === id);
   switch (type) {

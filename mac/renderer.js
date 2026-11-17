@@ -193,7 +193,7 @@ function render(s) {
   if (document.activeElement !== $('#topicEdit')) $('#topicEdit').value = S.ntfyTopic;
   $('#desktopNotif').checked = S.desktopNotif !== false;
   $('#ver').textContent = S.version || '';
-  const u = S.update; $('#updBar').hidden = !u;
+  const u = S.update; $('#updBar').style.display = u ? 'flex' : 'none';
   if (u) {
     $('#updTxt').textContent = u.status === 'installing' ? 'Installation de la mise à jour… Ping va redémarrer.' : u.status === 'error' ? 'La mise à jour a échoué : télécharge-la depuis le site.' : `Nouvelle version de Ping disponible (${u.tag}).`;
     $('#btnUpd').hidden = u.status === 'installing';

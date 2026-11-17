@@ -192,7 +192,15 @@ function render(s) {
   $('#topic').textContent = S.ntfyTopic;
   if (document.activeElement !== $('#topicEdit')) $('#topicEdit').value = S.ntfyTopic;
   $('#desktopNotif').checked = S.desktopNotif !== false;
+  $('#ver').textContent = S.version || '';
+  const u = S.update; $('#updBar').hidden = !u;
+  if (u) {
+    $('#updTxt').textContent = u.status === 'installing' ? 'Installation de la mise à jour… Ping va redémarrer.' : u.status === 'error' ? 'La mise à jour a échoué : télécharge-la depuis le site.' : `Nouvelle version de Ping disponible (${u.tag}).`;
+    $('#btnUpd').hidden = u.status === 'installing';
+  }
 }
+$('#btnUpd').onclick = () => act('installUpdate');
+$('#btnCheckUpd').onclick = (e) => { e.preventDefault(); act('checkUpdate'); toast('Vérification…'); };
 
 const webLink = () => (S.siteUrl || '') + 'app.html#' + S.ntfyTopic;
 $('#btnWeb').onclick = () => act('openExternal', webLink());

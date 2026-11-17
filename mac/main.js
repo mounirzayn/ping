@@ -5,6 +5,9 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const SITE = 'https://mounirzayn.github.io/ping/';
+const { spawn, execFile } = require('child_process');
+const os = require('os');
+let BUILD = {}; try { BUILD = require('./build-info.json'); } catch {}
 const NTFY = process.env.PING_NTFY || 'https://ntfy.sh/';
 const PART = 'persist:ping'; // session partagée : connexions conservées entre navigateur intégré et surveillance
 const MIN_INTERVAL = 30, MAX_SEEN = 600, MAX_HITS = 300, MAX_NOTIF_PER_CYCLE = 6;
@@ -45,7 +48,7 @@ function save() {
   broadcast();
   maybePushState();
 }
-const publicState = () => ({ ...state, siteUrl: SITE, watches: state.watches.map(({ seen, ...w }) => w) });
+const publicState = () => ({ ...state, siteUrl: SITE, version: BUILD.tag || 'dev', watches: state.watches.map(({ seen, ...w }) => w) });
 function broadcast() {
   BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('state', publicState()); });
   updateBadge();
@@ -148,8 +151,9 @@ function extractListings() {
     const srTitle = ([...card.querySelectorAll('span,h2,h3')].map((e) => e.textContent.trim()).find((t) => /^(voir l.annonce|see listing)\s*:\s*\S/i.test(t)) || '').replace(/^[^:]+:\s*/, '');
     const attrTitle = srTitle || [a.getAttribute('title'), a.getAttribute('aria-label')].find((t) => t && t.length > 8 && !bad.test(t)) || '';
     const imgAlt = [...card.querySelectorAll('img[alt]')].map((i) => i.alt).find((t) => t && t.length > 8 && !/avatar|profil|logo/i.test(t)) || '';
-    const heading = ([...card.querySelectorAll('h1,h2,h3,h4,[class*="title" i]')].map((e) => e.innerText.trim()).find((t) => t.length > 3 && !priceRe.test(t) && !bad.test(t)) || '');
-    const lines = (card.innerText || '').split('\n').map((l) => l.trim()).filter((l) => l.length > 3 && !bad.test(l) && !priceRe.test(l) && !/\b\d{5}\b/.test(l));
+    const attrStr = (t) => /^[^:]{1,25}:\s*["«]/.test(t) || /["»]\.\s*[A-Za-zÀ-ÿ ]{2,20}\s*:/.test(t);
+    const heading = ([...card.querySelectorAll('h1,h2,h3,h4,[class*="title" i]')].map((e) => e.innerText.trim()).find((t) => t.length > 3 && !priceRe.test(t) && !bad.test(t) && !attrStr(t)) || '');
+    const lines = (card.innerText || '').split('\n').map((l) => l.trim()).filter((l) => l.length > 3 && !bad.test(l) && !priceRe.test(l) && !/\b\d{5}\b/.test(l) && !attrStr(l));
     const fromLines = lines.sort((x, y) => y.length - x.length)[0] || '';
     let title = (attrTitle || (site.includes('.') ? heading : '') || imgAlt || heading || fromLines).split(/,\s*(?:Marque|État|Taille|Brand|Condition)\s*:/)[0].replace(/,\s*\d[\d.,\s]*\s?€.*$/, '').trim();
     if (!title) continue;
@@ -244,8 +248,10 @@ function keywordsOf(w) {
 // Mode « uniquement l'objet » : écarte les accessoires / jeux vendus seuls (FR, EN, ES, IT)
 const ACC = new Set(['manette','manettes','controller','controllers','mando','mandos','controllo','dualsense','dualshock','coque','housse','funda','etui','case','cover','skin','skins','sticker','stickers','protection','chargeur','charger','cable','cables','support','socle','dock','casque','headset','volant','jeu','jeux','game','games','gioco','giochi','juego','juegos','boite','grip','grips','joystick','pochette','sacoche','ventilateur','telecommande','remote','camera','facade','plaque','piece','pieces','carte','disque','batterie','accessoire','accessoires']);
 const words = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+const NOT_SALE = new Set(['recherche','recherches','cherche','cherchons','achete','achetons','achat','rachete','rachat','echange','echanges','troc','wanted','busco','cerco']);
 function isAccessory(title, keywords) {
   const ws = words(title);
+  if (NOT_SALE.has(ws[0]) || / (contre|echange|troc) /.test(' ' + ws.join(' ') + ' ')) return true; // « Recherche PS5 », « PS5 contre PC »
   if (ws.slice(0, 2).some((x) => ACC.has(x))) return true; // « Manette PS5 », « Funda rígida… »
   const flat = ' ' + ws.join(' ') + ' ';
   return keywords.some((k) => { const kw = words(k).join(' '); return kw && new RegExp(` (pour|para|for|per|compatible) (la |el |le |the |une |un )?${kw} `).test(flat); });
@@ -257,6 +263,7 @@ function matches(w, it) {
   const list = (s) => String(s || '').split(',').map(norm).filter(Boolean);
   if (list(w.exclude).some((x) => t.includes(x))) return false;
   if (w.strict && isAccessory(it.title, String(keywordsOf(w)).split(','))) return false;
+  if (w.strict && it.price != null && it.price <= 1) return false; // prix symbolique (échange, recherche)
   const incl = list(keywordsOf(w));
   return !incl.length || incl.some((x) => t.includes(x)); // l'annonce doit contenir un des mots-clés
 }
@@ -326,6 +333,8 @@ function doAction(type, p, fromWeb = false) {
     case 'checkNow': if (find(p)) enqueue(() => check(p, true)); break;
     case 'pauseAll': { const any = state.watches.some((w) => w.active); state.watches.forEach((w) => (w.active = !any)); save(); scheduleAll(); break; }
     case 'refresh': pushState(); break;
+    case 'installUpdate': if (!fromWeb) installUpdate(); break;
+    case 'checkUpdate': if (!fromWeb) checkUpdate(); break;
     case 'deleteHit': { const ids = new Set([].concat(p)); const before = state.hits.length; state.hits = state.hits.filter((h, i) => { const del = ids.has(h.id); if (del && i < state.unread) state.unread--; return !del; }); state.unread = Math.max(0, Math.min(state.unread, state.hits.length)); if (state.hits.length !== before) save(); break; }
     case 'clearHits': state.hits = []; state.unread = 0; save(); break;
     case 'updateGroup': {
@@ -362,6 +371,48 @@ function rewriteUrl(url, q, min, max) {
     else if (/ebay/.test(u.host)) { if (q) set('_nkw', q); set('_udlo', min); set('_udhi', max); }
     return u.toString();
   } catch { return url; }
+}
+
+// ---------- Mise à jour automatique (depuis les versions publiées sur GitHub) ----------
+const RELEASES = 'https://api.github.com/repos/mounirzayn/ping/releases/latest';
+async function checkUpdate() {
+  if (!BUILD.tag) return;
+  try {
+    const j = await (await fetch(RELEASES, { headers: { 'User-Agent': 'Ping', Accept: 'application/vnd.github+json' } })).json();
+    if (j.tag_name && j.tag_name > BUILD.tag) {
+      const fresh = !state.update || state.update.tag !== j.tag_name;
+      state.update = { tag: j.tag_name, status: 'ready' }; save();
+      if (fresh && Notification.isSupported()) {
+        const n = new Notification({ title: 'Mise à jour de Ping disponible', body: 'Clique pour l\'installer (30 secondes).' });
+        n.on('click', () => { showMain(); installUpdate(); }); n.show();
+      }
+    } else if (state.update) { delete state.update; save(); }
+  } catch {}
+}
+async function installUpdate() {
+  if (!state.update || state.update.status === 'installing') return;
+  state.update.status = 'installing'; save();
+  try {
+    const isMac = process.platform === 'darwin';
+    const asset = isMac ? 'Ping-Mac.zip' : 'Ping-Windows-Setup.exe';
+    const buf = Buffer.from(await (await fetch(`https://github.com/mounirzayn/ping/releases/download/${state.update.tag}/${asset}`)).arrayBuffer());
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ping-maj-'));
+    const file = path.join(dir, asset);
+    fs.writeFileSync(file, buf);
+    if (isMac) {
+      await new Promise((ok, ko) => execFile('ditto', ['-x', '-k', file, dir], (e) => (e ? ko(e) : ok())));
+      const newApp = path.join(dir, 'Ping-Mac', 'Ping.app');
+      const cur = process.execPath.replace(/\/Contents\/MacOS\/.*$/, ''); // …/Ping.app
+      const target = /\.app$/.test(cur) ? cur : '/Applications/Ping.app';
+      const sh = `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done; rm -rf "${target}"; ditto "${newApp}" "${target}"; xattr -cr "${target}"; codesign --force --deep --sign - "${target}" >/dev/null 2>&1; open "${target}"`;
+      spawn('/bin/sh', ['-c', sh], { detached: true, stdio: 'ignore' }).unref();
+    } else {
+      spawn(file, [], { detached: true, stdio: 'ignore' }).unref(); // installeur Windows : installe puis relance Ping
+    }
+    quitting = true; app.quit();
+  } catch (e) {
+    state.update.status = 'error'; state.update.err = String(e.message || e); save();
+  }
 }
 
 // ---------- Synchro avec l'espace web (via ntfy, sans serveur) ----------
@@ -446,6 +497,8 @@ app.whenReady().then(() => {
   listenCmds();
   setTimeout(pushState, 8000);
   setInterval(pushState, 2 * 3600 * 1000); // signe de vie toutes les 2 h
+  setTimeout(checkUpdate, 15000);
+  setInterval(checkUpdate, 3 * 3600 * 1000);
 });
 app.on('second-instance', showMain);
 app.on('activate', showMain);

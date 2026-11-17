@@ -23,6 +23,7 @@
       "index.html",
       "browser.html",
       "renderer.js",
+      "build-info.json",
       "assets/**"
     ],
     "mac": {

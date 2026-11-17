@@ -91,6 +91,10 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
   <div class="status"><span class="dot" id="globalDot"></span><span id="globalTxt"></span></div>
 </header>
 
+<div id="updBar" hidden style="background:var(--acc);color:#04120a;padding:10px 24px;display:flex;gap:14px;align-items:center;font-weight:700;font-size:13.5px">
+  <span id="updTxt">Nouvelle version de Ping disponible.</span>
+  <button id="btnUpd" style="background:#04120a;color:var(--acc);border:0;font-weight:800">Installer maintenant</button>
+</div>
 <main>
   <!-- ANNONCES -->
   <section class="view on" id="v-feed">
@@ -178,6 +182,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
         <p>Si un site demande une vérification, Ping se met en pause et te prévient : valide-la ici, ça repart tout seul.</p>
       </div>
     </div>
+    <p style="color:var(--mut);font-size:12px;margin-top:16px">Version <span id="ver"></span> · <a href="#" id="btnCheckUpd" style="color:var(--acc)">Rechercher une mise à jour</a></p>
   </section>
 </main>
 <div class="toast" id="toast"></div>

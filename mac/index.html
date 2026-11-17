@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Ping · Tableau de bord</title>
+<link rel="stylesheet" href="assets/styles.css">
+<style>header{-webkit-app-region:drag;padding-left:90px}header *{-webkit-app-region:no-drag}.hdr-actions{display:flex;gap:8px;align-items:center}</style>
+</head>
+<body>
+<header>
+  <div class="brand"><img src="assets/icon.png" alt=""><span>Ping</span><em>alertes annonces instantanées</em></div>
+  <div class="hdr-actions"><div class="stats"><span id="statWatches">0 ping actif</span><span id="statHits">0 alerte</span></div><button id="btnBrowser" class="ghost small">🌐 Navigateur</button><button id="btnPause" class="ghost small">Pause</button></div>
+</header>
+
+<main>
+  <section class="card" id="create">
+    <h2>Nouveau ping</h2>
+    <div class="grid">
+      <label>Nom<input id="fName" placeholder="PS5 pas chère"></label>
+      <label>Catégorie
+        <select id="fCat"></select>
+      </label>
+      <label>Mots-clés recherchés<input id="fQuery" placeholder="ps5, playstation 5"></label>
+      <label>Prix min (€)<input id="fMin" type="number" min="0" placeholder="0"></label>
+      <label>Prix max (€)<input id="fMax" type="number" min="0" placeholder="350"></label>
+      <label>Fréquence
+        <select id="fInterval">
+          <option value="30">30 s (rapide)</option>
+          <option value="45">45 s</option>
+          <option value="60" selected>1 min (recommandé)</option>
+          <option value="120">2 min</option>
+          <option value="300">5 min</option>
+        </select>
+      </label>
+      <label class="wide">Exclure les annonces contenant<input id="fExclude" placeholder="cassé, hs, pièces, boîte vide, échange"></label>
+    </div>
+    <div class="sites">
+      <span>Sites :</span>
+      <label class="chip"><input type="checkbox" value="lbc" checked> Leboncoin</label>
+      <label class="chip"><input type="checkbox" value="fb" checked> Marketplace</label>
+      <label class="chip"><input type="checkbox" value="vinted"> Vinted</label>
+      <label class="chip"><input type="checkbox" value="ebay"> eBay</label>
+    </div>
+    <details>
+      <summary>Ou coller directement une URL de recherche</summary>
+      <input id="fUrl" placeholder="https://www.leboncoin.fr/recherche?category=43&text=switch...">
+    </details>
+    <button id="btnAdd" class="primary">Créer le ping</button>
+  </section>
+
+  <section class="card">
+    <h2>Mes pings</h2>
+    <div id="watchList" class="watch-list"></div>
+  </section>
+
+  <section class="card feed-card">
+    <div class="feed-head"><h2>Flux en direct</h2><button id="btnClear" class="ghost">Tout marquer lu</button></div>
+    <div id="feed" class="feed"></div>
+  </section>
+
+  <section class="card">
+    <h2>Alertes sur ton téléphone</h2>
+    <ol class="steps">
+      <li>Installe l'appli gratuite <b>ntfy</b> (App Store ou Google Play).</li>
+      <li>Dans l'appli, appuie sur <b>+</b> et abonne-toi au canal : <code id="topic"></code> <button id="btnCopy" class="ghost small">Copier</button></li>
+            <li>Appuie sur <button id="btnTest" class="ghost small">Envoyer un test</button> : la notif doit arriver sur ton téléphone en une seconde.</li>
+    </ol>
+    <p><b>Ton espace web</b> (flux + gestion de tes pings depuis l'iPhone) : <button id="btnWeb" class="ghost small">Ouvrir</button> <button id="btnWebCopy" class="ghost small">Copier le lien perso</button></p>
+    <p class="muted">Ouvre ce lien perso sur ton iPhone puis "Partager > Sur l'écran d'accueil" pour l'avoir comme une appli.</p>
+    <label class="row"><input type="checkbox" id="desktopNotif"> Notifications aussi sur le Mac</label>
+    <p class="muted">Garde ce canal secret : quiconque le connaît peut lire tes alertes. Tu peux le changer :
+      <input id="topicEdit" class="inline"> <button id="btnTopic" class="ghost small">Enregistrer</button></p>
+  </section>
+
+  <section class="card muted-card">
+    <h2>Avant de commencer</h2>
+    <p>Ping a son propre navigateur, avec tes connexions gardées en mémoire. Ouvre-le une fois et connecte-toi aux sites qui le demandent :</p>
+    <p><button class="ghost small" data-open="https://www.facebook.com/marketplace/">Se connecter à Facebook</button> <button class="ghost small" data-open="https://www.leboncoin.fr">Ouvrir Leboncoin</button> <button class="ghost small" data-open="https://www.vinted.fr">Ouvrir Vinted</button></p>
+    <p>Ensuite Ping tourne en arrière-plan (icône dans la barre des menus), même fenêtre fermée. Si un site demande une vérification, Ping se met en pause et te prévient : clique sur la notif, valide dans le navigateur Ping, et ça repart.</p>
+  </section>
+</main>
+<script src="renderer.js"></script>
+</body>
+</html>

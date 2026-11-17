@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ping">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>Ping · Mon espace</title>
+<style>
+:root{--bg:#0b0d12;--card:#12151d;--line:#1f2430;--txt:#e8ecf3;--mut:#8a93a6;--acc:#39ff88;--warn:#ffb648;--bad:#ff5d6c}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:5;background:rgba(11,13,18,.9);backdrop-filter:blur(12px);padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;gap:9px;align-items:center;font-weight:800;font-size:20px;letter-spacing:-.4px}.brand img{width:28px;border-radius:7px}
+.sync{font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mut);display:inline-block}.dot.on{background:var(--acc);box-shadow:0 0 8px var(--acc)}.dot.off{background:var(--warn)}
+main{max-width:720px;margin:0 auto;padding:14px}
+nav{position:fixed;bottom:0;left:0;right:0;z-index:5;display:flex;background:rgba(18,21,29,.95);backdrop-filter:blur(12px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;color:var(--mut);padding:10px 0 8px;font:inherit;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px}
+nav button.on{color:var(--acc)}nav svg{width:22px;height:22px}
+.view{display:none}.view.on{display:block}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);margin:6px 2px 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.hit{display:flex;gap:12px;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:10px;align-items:center}
+.hit .img{width:84px;height:84px;border-radius:10px;flex:none;background:#1a1e28 center/cover no-repeat;display:grid;place-items:center;color:var(--mut);font-size:22px}
+.hit .p{color:var(--acc);font-weight:800;font-size:18px}
+.hit .t{font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hit .m{color:var(--mut);font-size:12px;margin-top:3px}
+.hit.fresh{border-color:var(--acc);animation:pop .6s}
+@keyframes pop{from{transform:scale(.97);box-shadow:0 0 0 4px rgba(57,255,136,.3)}to{transform:none}}
+.w{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.w .t{font-weight:700}.w .m{color:var(--mut);font-size:12.5px}
+.acts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+button.b{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 12px;font:inherit;font-size:13px}
+button.b:active{border-color:var(--acc);color:var(--acc)}
+button.primary{background:var(--acc);color:#04120a;border:0;border-radius:12px;padding:13px;font:inherit;font-weight:800;width:100%;font-size:16px}
+label{display:block;font-size:12px;color:var(--mut);margin-bottom:12px}
+input,select{display:block;width:100%;margin-top:5px;background:#0b0d12;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:11px 12px;font:inherit;font-size:16px}
+input:focus,select:focus{outline:none;border-color:var(--acc)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.chip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:99px;padding:8px 13px;color:var(--txt);font-size:14px;margin:0}
+.chip input{width:auto;margin:0;accent-color:var(--acc)}
+.empty{color:var(--mut);text-align:center;padding:36px 16px;font-size:14px}
+.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:var(--acc);color:#04120a;font-weight:700;padding:10px 16px;border-radius:99px;opacity:0;transition:.25s;z-index:9;font-size:14px}
+.toast.on{opacity:1;transform:translateX(-50%)}
+#login{max-width:420px;margin:12vh auto 0;padding:20px;text-align:center}
+#login img{width:72px;border-radius:18px}#login h1{margin:14px 0 6px;font-size:28px}
+#login p{color:var(--mut)}
+.muted{color:var(--mut);font-size:13px}
+a.link{color:var(--acc)}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:2px 8px;color:var(--mut);margin-left:6px}
+.st-ok{color:var(--acc)}.st-blocked{color:var(--warn)}.st-error,.st-empty{color:var(--bad)}
+</style>
+</head>
+<body>
+
+<section id="login" hidden>
+  <img src="icons/icon-192.png" alt="">
+  <h1>Ping</h1>
+  <p>Entre le code de ton canal, affiché dans l'appli Ping sur ton Mac (section « Alertes sur ton téléphone »).</p>
+  <form id="loginForm"><label>Code du canal<input id="topicIn" placeholder="ping-xxxxxxxxxxxx" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+  <button class="primary">Se connecter</button></form>
+  <p class="muted" style="margin-top:18px">Astuce : dans l'appli Mac, « Copier le lien perso » te connecte directement.</p>
+</section>
+
+<div id="appUi" hidden>
+<header>
+  <div class="brand"><img src="icons/icon-192.png" alt="">Ping</div>
+  <div class="sync"><span id="syncDot" class="dot"></span><span id="syncTxt">Connexion…</span></div>
+</header>
+<main>
+  <div class="view on" id="v-feed">
+    <h2>Flux en direct</h2>
+    <div id="feed"></div>
+  </div>
+
+  <div class="view" id="v-pings">
+    <h2>Mes pings</h2>
+    <div id="pings"></div>
+  </div>
+
+  <div class="view" id="v-new">
+    <h2>Nouveau ping</h2>
+    <form class="card" id="newForm">
+      <label>Nom<input id="fName" placeholder="PS5 pas chère"></label>
+      <label>Catégorie<select id="fCat"></select></label>
+      <label>Mots-clés<input id="fQuery" placeholder="ps5, switch oled, yamaha mt07…"></label>
+      <div class="row2">
+        <label>Prix min (€)<input id="fMin" type="number" inputmode="numeric" placeholder="0"></label>
+        <label>Prix max (€)<input id="fMax" type="number" inputmode="numeric" placeholder="350"></label>
+      </div>
+      <label>Exclure les annonces contenant<input id="fExclude" placeholder="cassé, hs, pièces, échange"></label>
+      <label>Fréquence<select id="fInterval"><option value="30">30 s (rapide)</option><option value="45">45 s</option><option value="60" selected>1 min (recommandé)</option><option value="120">2 min</option><option value="300">5 min</option></select></label>
+      <div class="chips">
+        <label class="chip"><input type="checkbox" value="lbc" checked> Leboncoin</label>
+        <label class="chip"><input type="checkbox" value="fb" checked> Marketplace</label>
+        <label class="chip"><input type="checkbox" value="vinted"> Vinted</label>
+        <label class="chip"><input type="checkbox" value="ebay"> eBay</label>
+      </div>
+      <button class="primary">Envoyer au Mac</button>
+      <p class="muted" style="margin-top:10px">Le ping est créé sur ton Mac, qui fait la surveillance avec tes connexions. Il apparaît dans « Mes pings » en quelques secondes.</p>
+    </form>
+  </div>
+
+  <div class="view" id="v-more">
+    <h2>Réglages</h2>
+    <div class="card">
+      <p><b>Notifications sur l'iPhone</b></p>
+      <p class="muted">Installe l'appli gratuite <b>ntfy</b>, appuie sur +, et abonne-toi au canal : <b id="topicShow"></b></p>
+      <div class="acts"><button class="b" id="copyTopic">Copier le canal</button></div>
+    </div>
+    <div class="card">
+      <p><b>Mettre Ping sur l'écran d'accueil</b></p>
+      <p class="muted">Dans Safari : bouton Partager, puis « Sur l'écran d'accueil ».</p>
+    </div>
+    <div class="card">
+      <div class="acts" style="margin:0"><button class="b" id="pauseAll">Tout mettre en pause / reprendre</button><button class="b" id="resync">Resynchroniser</button><button class="b" id="logout">Se déconnecter</button></div>
+    </div>
+    <p class="muted" style="text-align:center"><a class="link" href="./">Ping</a> · par N&amp;K Support</p>
+  </div>
+</main>
+
+<nav>
+  <button data-v="feed" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Flux</button>
+  <button data-v="pings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>Mes pings</button>
+  <button data-v="new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Nouveau</button>
+  <button data-v="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Réglages</button>
+</nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const NTFY = 'https://ntfy.sh/';
+const CATS = {
+  consoles: { label: 'Consoles & jeux vidéo', lbc: 43 }, voitures: { label: 'Voitures', lbc: 2 },
+  motos: { label: 'Motos', lbc: 3 }, telephones: { label: 'Téléphones', lbc: 17 },
+  informatique: { label: 'Informatique', lbc: 15 }, tout: { label: 'Toutes catégories', lbc: null },
+};
+const SITE_NAMES = { lbc: 'Leboncoin', fb: 'Marketplace', vinted: 'Vinted', ebay: 'eBay' };
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} }, del(k) { try { localStorage.removeItem(k); } catch {} } };
+const ago = (t) => { if (!t) return 'jamais'; const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 60 ? `il y a ${s} s` : s < 3600 ? `il y a ${Math.round(s / 60)} min` : s < 86400 ? `il y a ${Math.round(s / 3600)} h` : `il y a ${Math.round(s / 86400)} j`; };
+function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2200); }
+
+let topic = null, hits = [], etat = null, es = null, freshIds = new Set();
+
+// ---------- Connexion ----------
+function boot() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (/^[\w-]{6,64}$/.test(h)) { store.set('pingTopic', h); history.replaceState(null, '', location.pathname); }
+  topic = store.get('pingTopic');
+  $('#login').hidden = !!topic; $('#appUi').hidden = !topic;
+  if (topic) start();
+}
+$('#loginForm').onsubmit = (e) => {
+  e.preventDefault();
+  const v = $('#topicIn').value.trim();
+  if (!/^[\w-]{6,64}$/.test(v)) return toast('Code invalide');
+  store.set('pingTopic', v); boot();
+};
+$('#logout').onclick = () => { store.del('pingTopic'); if (es) es.close(); location.reload(); };
+
+// ---------- Lecture du canal (ntfy) ----------
+function parseHit(m) {
+  if (!m.title || !m.title.startsWith('🔔') || /Test Ping/.test(m.title)) return null;
+  const pm = m.title.match(/🔔\s*([\d\s  .,]+)\s*€/);
+  const price = pm ? parseFloat(pm[1].replace(/[\s  .]/g, '').replace(',', '.')) : null;
+  const watch = m.title.split('·').slice(pm ? 1 : 0).join('·').replace('🔔', '').trim();
+  const [title, site] = (m.message || '').split('\n');
+  return { id: m.id, at: m.time * 1000, price, watch, title, site: site || '', url: m.click, img: m.attachment ? m.attachment.url : null };
+}
+function handle(m, live) {
+  if (m.event !== 'message') return;
+  if (m.topic === topic + '-etat') {
+    try { const s = JSON.parse(m.message); if (!etat || s.at >= etat.at) { etat = s; renderPings(); renderSync(); } } catch {}
+    return;
+  }
+  if (m.topic === topic) {
+    const h = parseHit(m); if (!h || hits.some((x) => x.id === h.id)) return;
+    hits.push(h); hits.sort((a, b) => b.at - a.at);
+    if (live) { freshIds.add(h.id); if (navigator.vibrate) navigator.vibrate(60); }
+    renderFeed();
+  }
+}
+async function start() {
+  $('#topicShow').textContent = topic;
+  renderFeed(); renderPings(); renderSync();
+  try {
+    const r = await fetch(`${NTFY}${topic},${topic}-etat/json?poll=1&since=12h`);
+    const txt = await r.text();
+    txt.split('\n').filter(Boolean).forEach((l) => { try { handle(JSON.parse(l), false); } catch {} });
+  } catch { toast('Connexion impossible'); }
+  renderFeed(); renderPings(); renderSync();
+  if (!etat) send('refresh');
+  listen();
+}
+function listen() {
+  if (es) es.close();
+  es = new EventSource(`${NTFY}${topic},${topic}-etat/sse`);
+  es.onmessage = (e) => { try { handle(JSON.parse(e.data), true); } catch {} };
+  es.onerror = () => { renderSync(); };
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && topic) { if (!es || es.readyState === 2) listen(); renderSync(); } });
+
+// ---------- Commandes vers le Mac ----------
+async function send(cmd, p) {
+  try {
+    await fetch(NTFY + topic + '-cmd', { method: 'POST', body: JSON.stringify({ cmd, p }) });
+    return true;
+  } catch { toast('Envoi impossible, vérifie ta connexion'); return false; }
+}
+
+// ---------- Affichage ----------
+function renderSync() {
+  const dot = $('#syncDot'), txt = $('#syncTxt');
+  if (!etat) { dot.className = 'dot'; txt.textContent = 'En attente du Mac'; return; }
+  const old = Date.now() - etat.at > 3 * 3600 * 1000;
+  dot.className = 'dot ' + (old ? 'off' : 'on');
+  txt.textContent = (old ? 'Mac hors ligne ? ' : 'Mac connecté · ') + ago(etat.at);
+}
+function renderFeed() {
+  const el = $('#feed');
+  if (!hits.length) { el.innerHTML = `<div class="empty">Aucune nouvelle annonce sur les 12 dernières heures.<br><br>Dès que ton Mac en trouve une, elle apparaît ici instantanément.</div>`; return; }
+  el.innerHTML = hits.slice(0, 150).map((h) => `
+    <a class="hit ${freshIds.has(h.id) ? 'fresh' : ''}" href="${esc(h.url)}" target="_blank" rel="noopener">
+      <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : '🔔'}</div>
+      <div style="min-width:0">
+        <div class="p">${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : 'Prix ?'}</div>
+        <div class="t">${esc(h.title)}</div>
+        <div class="m">${esc(h.site)} · ${esc(h.watch)} · ${ago(h.at)}</div>
+      </div>
+    </a>`).join('');
+}
+const STATUS = { ok: 'Actif', blocked: 'Vérification demandée : ouvre Ping sur le Mac', error: 'Erreur', empty: 'Aucune annonce lue', pending: 'Premier passage…' };
+function renderPings() {
+  const el = $('#pings');
+  if (!etat) { el.innerHTML = `<div class="empty">En attente de ton Mac…<br><br>Vérifie que l'appli Ping est ouverte, puis appuie sur « Resynchroniser » dans Réglages.</div>`; return; }
+  if (!etat.w.length) { el.innerHTML = `<div class="empty">Aucun ping. Crée ton premier dans « Nouveau ».</div>`; return; }
+  el.innerHTML = etat.w.map((w) => `
+    <div class="card">
+      <div class="w"><div>
+        <div class="t">${esc(w.n)}<span class="tag">${esc(w.s)}</span></div>
+        <div class="m">${esc(CATS[w.c]?.label || '')}${w.mi || w.ma ? ` · ${w.mi || 0} à ${w.ma || '∞'} €` : ''} · toutes les ${w.i} s · ${w.ct} alerte(s)</div>
+        <div class="m ${w.a ? 'st-' + esc(w.st) : ''}">${w.a ? esc(STATUS[w.st] || '') : 'En pause'}</div>
+      </div></div>
+      <div class="acts">
+        <button class="b" data-a="toggle" data-id="${esc(w.id)}">${w.a ? 'Pause' : 'Reprendre'}</button>
+        <button class="b" data-a="checkNow" data-id="${esc(w.id)}">Vérifier</button>
+        ${w.u ? `<a href="${esc(w.u)}" target="_blank" rel="noopener"><button class="b">Voir la recherche</button></a>` : ''}
+        <button class="b" data-a="delete" data-id="${esc(w.id)}">Supprimer</button>
+      </div>
+    </div>`).join('');
+}
+$('#pings').onclick = async (e) => {
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  const a = b.dataset.a;
+  if (a === 'delete' && b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Confirmer ?'; return; }
+  if (await send(a, b.dataset.id)) toast(a === 'checkNow' ? 'Vérification lancée sur le Mac' : 'Envoyé au Mac');
+};
+
+// ---------- Création ----------
+$('#fCat').innerHTML = Object.entries(CATS).map(([k, c]) => `<option value="${k}">${c.label}</option>`).join('');
+function buildUrl(site, q, catKey, min, max) {
+  const cat = CATS[catKey]; const query = q || (catKey !== 'tout' ? cat.label : ''); let u;
+  if (site === 'lbc') {
+    u = new URL('https://www.leboncoin.fr/recherche');
+    if (cat.lbc) u.searchParams.set('category', cat.lbc);
+    if (q) u.searchParams.set('text', q);
+    if (min || max) u.searchParams.set('price', `${min || 'min'}-${max || 'max'}`);
+    u.searchParams.set('sort', 'time'); u.searchParams.set('order', 'desc');
+  } else if (site === 'fb') {
+    u = new URL('https://www.facebook.com/marketplace/search/');
+    u.searchParams.set('query', query); u.searchParams.set('sortBy', 'creation_time_descend');
+    if (min) u.searchParams.set('minPrice', min); if (max) u.searchParams.set('maxPrice', max);
+  } else if (site === 'vinted') {
+    u = new URL('https://www.vinted.fr/catalog');
+    u.searchParams.set('search_text', query); u.searchParams.set('order', 'newest_first');
+    if (min) u.searchParams.set('price_from', min); if (max) u.searchParams.set('price_to', max);
+  } else {
+    u = new URL('https://www.ebay.fr/sch/i.html');
+    u.searchParams.set('_nkw', query); u.searchParams.set('_sop', '10');
+    if (min) u.searchParams.set('_udlo', min); if (max) u.searchParams.set('_udhi', max);
+  }
+  return u.toString();
+}
+$('#newForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const q = $('#fQuery').value.trim(), cat = $('#fCat').value;
+  const sites = [...document.querySelectorAll('.chips input:checked')].map((i) => i.value);
+  if (!sites.length) return toast('Choisis au moins un site');
+  if (!q && cat === 'tout') return toast('Ajoute des mots-clés ou une catégorie');
+  const base = { name: $('#fName').value.trim() || q || CATS[cat].label, cat, min: $('#fMin').value, max: $('#fMax').value, exclude: $('#fExclude').value, interval: +$('#fInterval').value };
+  const list = sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q, cat, base.min, base.max) }));
+  if (await send('addWatches', list)) {
+    toast('Ping envoyé au Mac');
+    ['#fName', '#fQuery', '#fMin', '#fMax', '#fExclude'].forEach((s) => ($(s).value = ''));
+    go('pings');
+  }
+};
+
+// ---------- Navigation & réglages ----------
+function go(v) {
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  document.querySelectorAll('.view').forEach((x) => x.classList.toggle('on', x.id === 'v-' + v));
+  if (v === 'feed') setTimeout(() => { freshIds.clear(); }, 3000);
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('nav button').forEach((b) => (b.onclick = () => go(b.dataset.v)));
+$('#copyTopic').onclick = async () => { try { await navigator.clipboard.writeText(topic); toast('Canal copié'); } catch { toast(topic); } };
+$('#pauseAll').onclick = async () => { if (await send('pauseAll')) toast('Envoyé au Mac'); };
+$('#resync').onclick = async () => { if (await send('refresh')) toast('Synchro demandée'); };
+setInterval(() => { renderSync(); if ($('#v-feed').classList.contains('on')) renderFeed(); }, 30000);
+
+boot();
+</script>
+</body>
+</html>

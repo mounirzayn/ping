@@ -1,0 +1,28 @@
+{
+  "name": "ping",
+  "productName": "Ping",
+  "version": "1.0.0",
+  "description": "Alertes instantanées sur les nouvelles annonces Leboncoin, Marketplace, Vinted et eBay",
+  "main": "main.js",
+  "author": "N&K Support",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac --arm64 --dir"
+  },
+  "devDependencies": {
+    "electron": "^45.3.3",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "fr.nksupport.ping",
+    "productName": "Ping",
+    "files": ["main.js", "preload.js", "index.html", "browser.html", "renderer.js", "assets/**"],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.png",
+      "identity": null,
+      "target": "dir",
+      "extendInfo": { "LSUIElement": false }
+    }
+  }
+}

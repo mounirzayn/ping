@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Ping · Navigateur</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0d12;color:#e8ecf3;font:13px system-ui,-apple-system,sans-serif}
+  .bar{display:flex;gap:6px;align-items:center;padding:8px 12px 8px 84px;border-bottom:1px solid #1f2430;-webkit-app-region:drag;height:36px}
+  .bar *{-webkit-app-region:no-drag}
+  button{background:transparent;border:1px solid #1f2430;color:#e8ecf3;border-radius:8px;padding:5px 10px;cursor:pointer;font:inherit}
+  button:hover{border-color:#39ff88;color:#39ff88}
+  input{flex:1;background:#12151d;border:1px solid #1f2430;color:#e8ecf3;border-radius:8px;padding:6px 10px;font:inherit}
+  input:focus{outline:none;border-color:#39ff88}
+  .quick button{font-size:12px;padding:4px 9px}
+  webview{width:100%;height:calc(100% - 53px)}
+</style>
+</head>
+<body>
+  <div class="bar">
+    <button id="back" title="Précédent">‹</button>
+    <button id="fwd" title="Suivant">›</button>
+    <button id="reload" title="Recharger">↻</button>
+    <input id="url" spellcheck="false">
+    <span class="quick">
+      <button data-u="https://www.leboncoin.fr">LBC</button>
+      <button data-u="https://www.facebook.com/marketplace/">Marketplace</button>
+      <button data-u="https://www.vinted.fr">Vinted</button>
+      <button data-u="https://www.ebay.fr">eBay</button>
+    </span>
+    <button id="ext" title="Ouvrir dans Safari">Safari ↗</button>
+  </div>
+  <webview id="wv" partition="persist:ping" allowpopups></webview>
+<script>
+  const wv = document.getElementById('wv'), url = document.getElementById('url');
+  const start = new URLSearchParams(location.search).get('url') || 'https://www.leboncoin.fr';
+  wv.src = start; url.value = start;
+  const go = (u) => { if (!/^https?:\/\//.test(u)) u = 'https://' + u; wv.loadURL(u); };
+  wv.addEventListener('did-navigate', (e) => (url.value = e.url));
+  wv.addEventListener('did-navigate-in-page', (e) => (url.value = e.url));
+  wv.addEventListener('page-title-updated', (e) => (document.title = 'Ping · ' + e.title));
+  url.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(url.value.trim()); });
+  document.getElementById('back').onclick = () => wv.canGoBack() && wv.goBack();
+  document.getElementById('fwd').onclick = () => wv.canGoForward() && wv.goForward();
+  document.getElementById('reload').onclick = () => wv.reload();
+  document.getElementById('ext').onclick = () => window.ping.action('openExternal', wv.getURL());
+  document.querySelectorAll('[data-u]').forEach((b) => (b.onclick = () => go(b.dataset.u)));
+</script>
+</body>
+</html>

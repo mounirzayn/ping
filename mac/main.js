@@ -14,6 +14,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 app.userAgentFallback = app.userAgentFallback.replace(/\s?Electron\/\S+/i, '').replace(/\s?ping\/\S+/i, '');
 
 if (!app.requestSingleInstanceLock()) app.quit();
+const IS_MAC = process.platform === 'darwin';
+if (process.platform === 'win32') app.setAppUserModelId('fr.nksupport.ping'); // requis pour les notifications Windows
 
 let state, dataFile, mainWin = null, tray = null, quitting = false;
 const timers = new Map();
@@ -42,7 +44,8 @@ function broadcast() {
 function updateBadge() {
   const n = state.unread ? String(Math.min(state.unread, 99)) : '';
   if (app.dock) app.dock.setBadge(n);
-  if (tray) tray.setTitle(n ? ' ' + n : '');
+  if (tray) { if (IS_MAC) tray.setTitle(n ? ' ' + n : ''); tray.setToolTip(n ? `Ping · ${n} nouvelle(s) annonce(s)` : 'Ping'); }
+  if (!IS_MAC && mainWin && !mainWin.isDestroyed()) mainWin.setTitle(n ? `Ping (${n})` : 'Ping');
 }
 
 // ---------- Planification ----------
@@ -193,7 +196,8 @@ function showMain() {
   if (mainWin && !mainWin.isDestroyed()) { mainWin.show(); mainWin.focus(); return; }
   mainWin = new BrowserWindow({
     width: 1180, height: 860, minWidth: 820, minHeight: 600, title: 'Ping',
-    backgroundColor: '#0b0d12', titleBarStyle: 'hiddenInset',
+    backgroundColor: '#0b0d12', ...(IS_MAC ? { titleBarStyle: 'hiddenInset' } : { autoHideMenuBar: true }),
+    icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   mainWin.loadFile(path.join(__dirname, 'index.html'));
@@ -202,7 +206,8 @@ function showMain() {
 
 function openBrowser(url) {
   const win = new BrowserWindow({
-    width: 1280, height: 900, title: 'Ping · Navigateur', backgroundColor: '#0b0d12', titleBarStyle: 'hiddenInset',
+    width: 1280, height: 900, title: 'Ping · Navigateur', backgroundColor: '#0b0d12', ...(IS_MAC ? { titleBarStyle: 'hiddenInset' } : { autoHideMenuBar: true }),
+    icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), webviewTag: true },
   });
   win.loadFile(path.join(__dirname, 'browser.html'), { query: { url: url || 'https://www.leboncoin.fr' } });
@@ -297,8 +302,9 @@ async function listenCmds() {
 
 // ---------- Barre des menus ----------
 function buildTray() {
-  const img = nativeImage.createFromPath(path.join(__dirname, 'assets', 'trayTemplate.png'));
-  img.setTemplateImage(true);
+  let img;
+  if (IS_MAC) { img = nativeImage.createFromPath(path.join(__dirname, 'assets', 'trayTemplate.png')); img.setTemplateImage(true); }
+  else img = nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray-win.png'));
   tray = new Tray(img);
   tray.setToolTip('Ping');
   const refresh = () => tray.setContextMenu(Menu.buildFromTemplate([
@@ -312,6 +318,7 @@ function buildTray() {
   const toggleAll = () => { const any = state.watches.some((w) => w.active); state.watches.forEach((w) => (w.active = !any)); save(); scheduleAll(); };
   refresh();
   tray.on('mouse-enter', refresh);
+  if (!IS_MAC) tray.on('click', showMain); // Windows : clic sur l'icône = ouvrir Ping
   updateBadge();
 }
 

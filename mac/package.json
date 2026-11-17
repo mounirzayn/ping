@@ -7,7 +7,8 @@
   "author": "N&K Support",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --mac --arm64 --dir"
+    "build": "electron-builder --mac --arm64 --dir",
+    "build:win": "electron-builder --win --x64"
   },
   "devDependencies": {
     "electron": "^45.3.3",
@@ -16,13 +17,34 @@
   "build": {
     "appId": "fr.nksupport.ping",
     "productName": "Ping",
-    "files": ["main.js", "preload.js", "index.html", "browser.html", "renderer.js", "assets/**"],
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "browser.html",
+      "renderer.js",
+      "assets/**"
+    ],
     "mac": {
       "category": "public.app-category.utilities",
       "icon": "build/icon.png",
       "identity": null,
       "target": "dir",
-      "extendInfo": { "LSUIElement": false }
+      "extendInfo": {
+        "LSUIElement": false
+      }
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "Ping-Windows-Setup.exe",
+      "shortcutName": "Ping",
+      "createDesktopShortcut": true,
+      "runAfterFinish": true
     }
   }
 }

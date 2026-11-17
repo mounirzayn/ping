@@ -1,4 +1,4 @@
-name: Construire Ping pour Mac
+name: Construire Ping (Mac + Windows)
 on:
   push:
     branches: [main]
@@ -7,6 +7,25 @@ on:
 permissions:
   contents: write
 jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Construire l'installeur Windows
+        working-directory: mac
+        run: |
+          npm install --no-audit --no-fund
+          npx electron-builder --win --x64 --publish never
+      - name: Publier la version
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Ping 1.0.${{ github.run_number }}
+          body: "Mac : télécharge Ping-Mac.zip, dézippe, puis clic droit sur « Installer Ping.command » > Ouvrir. Windows : lance Ping-Windows-Setup.exe (si Windows affiche un avertissement : Informations complémentaires > Exécuter quand même)."
+          files: mac/dist/Ping-Windows-Setup.exe
+          make_latest: true
   build:
     runs-on: macos-latest
     steps:
@@ -17,7 +36,7 @@ jobs:
         working-directory: mac
         run: |
           npm install --no-audit --no-fund
-          npx electron-builder --mac --arm64 --dir
+          npx electron-builder --mac --arm64 --dir --publish never
           codesign --force --deep --sign - dist/mac-arm64/Ping.app
       - name: Préparer le zip
         run: |
@@ -42,7 +61,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: Ping 1.0.${{ github.run_number }} pour Mac
-          body: "Télécharge Ping-Mac.zip, dézippe, puis clic droit sur « Installer Ping.command » > Ouvrir."
+          name: Ping 1.0.${{ github.run_number }}
+          body: "Mac : télécharge Ping-Mac.zip, dézippe, puis clic droit sur « Installer Ping.command » > Ouvrir. Windows : lance Ping-Windows-Setup.exe (si Windows affiche un avertissement : Informations complémentaires > Exécuter quand même)."
           files: Ping-Mac.zip
           make_latest: true

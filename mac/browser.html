@@ -7,6 +7,7 @@
   html,body{margin:0;height:100%;background:#0b0d12;color:#e8ecf3;font:13px system-ui,-apple-system,sans-serif}
   .bar{display:flex;gap:6px;align-items:center;padding:8px 12px 8px 84px;border-bottom:1px solid #1f2430;-webkit-app-region:drag;height:36px}
   .bar *{-webkit-app-region:no-drag}
+  .os-win32 .bar{padding-left:12px;-webkit-app-region:no-drag}
   button{background:transparent;border:1px solid #1f2430;color:#e8ecf3;border-radius:8px;padding:5px 10px;cursor:pointer;font:inherit}
   button:hover{border-color:#39ff88;color:#39ff88}
   input{flex:1;background:#12151d;border:1px solid #1f2430;color:#e8ecf3;border-radius:8px;padding:6px 10px;font:inherit}
@@ -27,7 +28,7 @@
       <button data-u="https://www.vinted.fr">Vinted</button>
       <button data-u="https://www.ebay.fr">eBay</button>
     </span>
-    <button id="ext" title="Ouvrir dans Safari">Safari ↗</button>
+    <button id="ext" title="Ouvrir dans ton navigateur">Ouvrir ↗</button>
   </div>
   <webview id="wv" partition="persist:ping" allowpopups></webview>
 <script>

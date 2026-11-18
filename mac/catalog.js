@@ -21,14 +21,14 @@
     {
       id: 'multimedia', label: 'Multimédia', strict: true,
       sites: ['lbc', 'fb', 'vinted', 'ebay'], defaults: ['lbc', 'fb', 'vinted'],
-      links: [['Back Market', 'https://www.backmarket.fr'], ['Rakuten', 'https://fr.shopping.rakuten.com']],
+      links: [['ParuVendu', 'https://www.paruvendu.fr'], ['Easy Cash', 'https://bons-plans.easycash.fr'], ['Cash Express', 'https://www.cashexpress.fr'], ['Back Market', 'https://www.backmarket.fr'], ['Rakuten', 'https://fr.shopping.rakuten.com']],
       cats: [['consoles', 'Consoles', 43], ['telephones', 'Téléphones & objets connectés', 17], ['informatique', 'Ordinateurs', 15],
         ['image_son', 'Photo, audio & vidéo', 16]],
     },
     {
       id: 'maison', label: 'Maison & jardin',
       sites: ['lbc', 'fb', 'vinted', 'ebay'], defaults: ['lbc', 'fb'],
-      links: [['Selency', 'https://www.selency.fr']],
+      links: [['ParuVendu', 'https://www.paruvendu.fr'], ['Easy Cash', 'https://bons-plans.easycash.fr'], ['Cash Express', 'https://www.cashexpress.fr'], ['Selency', 'https://www.selency.fr']],
       cats: [['mobilier', 'Ameublement', 19], ['electromenager', 'Électroménager', 20], ['decoration', 'Décoration', 39],
         ['bricolage', 'Bricolage', 21], ['jardinage', 'Jardinage', 52], ['arts_table', 'Arts de la table', 45]],
     },
@@ -42,7 +42,7 @@
     {
       id: 'loisirs', label: 'Loisirs',
       sites: ['lbc', 'fb', 'vinted', 'ebay'], defaults: ['lbc', 'fb', 'vinted'],
-      links: [['Rakuten', 'https://fr.shopping.rakuten.com']],
+      links: [['ParuVendu', 'https://www.paruvendu.fr'], ['Easy Cash', 'https://bons-plans.easycash.fr'], ['Cash Express', 'https://www.cashexpress.fr'], ['Rakuten', 'https://fr.shopping.rakuten.com']],
       cats: [['jeux_jouets', 'Jeux & jouets', 41], ['sport', 'Sport & plein air', 29], ['velos', 'Vélos', 55], ['instruments', 'Instruments de musique', 30],
         ['collection', 'Collection', 40], ['livres', 'Livres', 27], ['dvd', 'DVD & films', 25], ['cd', 'CD & vinyles', 26]],
     },

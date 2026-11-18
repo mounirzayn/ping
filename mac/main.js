@@ -104,7 +104,7 @@ function extractListings() {
     [/ebay\.[a-z.]+\/itm\/(?:[^/]+\/)?(\d{9,})/, 'eBay'],
   ];
   // Prix : "20 €", "1 350 €", "230.00 €", "21,70 €", "€200", "EUR 12,00"
-  const priceRe = /(?:€|EUR)\s?(\d{1,3}(?:[\s  .]\d{3})*|\d+)(?:[.,](\d{1,2}))?|(\d{1,3}(?:[\s  .]\d{3})*|\d+)(?:[.,](\d{1,2}))?\s?(?:€|EUR)/;
+  const priceRe = /(?:€|EUR)[ \u202f\u00a0]?(\d{1,3}(?:[ \u202f\u00a0.]\d{3})*|\d+)(?:[.,](\d{1,2}))?|(\d{1,3}(?:[ \u202f\u00a0.]\d{3})*|\d+)(?:[.,](\d{1,2}))?[ \u202f\u00a0]?(?:€|EUR)/; // pas de retour à la ligne dans un prix
   const parsePrice = (t) => {
     if (/\b(gratuit|free)\b/i.test(t || '') && !priceRe.test(t)) return 0;
     const m = (t || '').match(priceRe); if (!m) return null;
@@ -139,6 +139,9 @@ function extractListings() {
   const keyOf = (a) => { const k = known(a.href); if (k) return k; if (generic && a.host === location.host && generic.has(a.pathname)) return ['Web:' + host + a.pathname, host]; return null; };
 
   const bad = /^(voir l.annonce|see listing|sponsoris|nouveau|new|\d+([.,]\d)?\s*\(\d+\)|prix|située|livraison|pro|urgent|à la une)/i;
+  // Texte de la carte, y compris quand le site ne l'affiche pas encore (annonces hors écran)
+  const textOf = (el) => { const t = el.innerText || ''; if (t.trim().length > 20) return t;
+    return [...el.querySelectorAll('*')].filter((e) => e.tagName !== 'STYLE' && e.tagName !== 'SCRIPT' && !e.children.length).map((e) => e.textContent.trim()).filter(Boolean).join('\n'); };
   const out = new Map();
   for (const a of anchors) {
     const key = keyOf(a);
@@ -161,17 +164,20 @@ function extractListings() {
       if (area > best) { best = area; img = src; }
     }
     // Titre
-    const srTitle = ([...card.querySelectorAll('span,h2,h3')].map((e) => e.textContent.trim()).find((t) => /^(voir l.annonce|see listing)\s*:\s*\S/i.test(t)) || '').replace(/^[^:]+:\s*/, '');
+    const cardText = textOf(card);
+    if (/(^|\n)\s*à la une\s*(\n|$)/i.test(cardText)) continue; // annonce ancienne remise en avant (payante), pas une nouveauté
+    const srRe = /^(voir l.annonce|see listing)\s*:\s*\S/i;
+    const srTitle = ([...card.querySelectorAll('*')].flatMap((e) => [e.getAttribute('title'), e.getAttribute('aria-label'), /^(SPAN|H2|H3)$/.test(e.tagName) ? e.textContent.trim() : null]).find((t) => t && srRe.test(t)) || '').replace(/^[^:]+:\s*/, '');
     const attrTitle = srTitle || [a.getAttribute('title'), a.getAttribute('aria-label')].find((t) => t && t.length > 8 && !bad.test(t)) || '';
     const imgAlt = [...card.querySelectorAll('img[alt]')].map((i) => i.alt).find((t) => t && t.length > 8 && !/avatar|profil|logo/i.test(t)) || '';
     const attrStr = (t) => /^[^:]{1,25}:\s*["«]/.test(t) || /["»]\.\s*[A-Za-zÀ-ÿ ]{2,20}\s*:/.test(t);
     const heading = ([...card.querySelectorAll('h1,h2,h3,h4,[class*="title" i]')].map((e) => e.innerText.trim()).find((t) => t.length > 3 && !priceRe.test(t) && !bad.test(t) && !attrStr(t)) || '');
-    const lines = (card.innerText || '').split('\n').map((l) => l.trim()).filter((l) => l.length > 3 && !bad.test(l) && !priceRe.test(l) && !/\b\d{5}\b/.test(l) && !attrStr(l));
+    const lines = cardText.split('\n').map((l) => l.trim()).filter((l) => l.length > 3 && !bad.test(l) && !priceRe.test(l) && !/\b\d{5}\b/.test(l) && !attrStr(l));
     const fromLines = lines.sort((x, y) => y.length - x.length)[0] || '';
     let title = (attrTitle || (site.includes('.') ? heading : '') || imgAlt || heading || fromLines).split(/,\s*(?:Marque|État|Taille|Brand|Condition)\s*:/)[0].replace(/,\s*\d[\d.,\s]*\s?€.*$/, '').trim();
     if (!title) continue;
-    if (site.includes('.') && !img && !priceRe.test(card.innerText || '')) continue; // lien de filtre, pas une annonce
-    const price = parsePrice(attrTitle) ?? parsePrice(imgAlt) ?? parsePrice(card.innerText);
+    if (site.includes('.') && !img && !priceRe.test(cardText)) continue; // lien de filtre, pas une annonce
+    const price = parsePrice(attrTitle) ?? parsePrice(imgAlt) ?? parsePrice(cardText);
     const url = known(a.href) ? a.href.split('?')[0].split('#')[0] : a.href.split('#')[0];
     out.set(id, { id, site, url, title: title.slice(0, 140), price, img });
   }
@@ -253,6 +259,20 @@ async function check(id, manual = false) {
   if (w.active) scheduleNext(w);
 }
 
+// Variantes d'écriture d'un même produit (« ps5 » = « PlayStation 5 » = « Play 5 »…)
+const SYNONYMS = [
+  ['ps5', 'playstation5', 'play5', 'playstationfive', 'sonyps5'],
+  ['ps4', 'playstation4', 'play4'],
+  ['xboxseriesx', 'xboxseriex', 'seriesx', 'seriex', 'xsx'],
+  ['xboxseriess', 'xboxseries', 'seriess', 'xss'],
+  ['switch', 'nintendoswitch'],
+  ['switcholed', 'switcholed', 'oled'],
+];
+function expandKw(list) {
+  const out = new Set(list);
+  for (const k of list) for (const g of SYNONYMS) if (g.includes(k)) g.forEach((x) => out.add(x));
+  return [...out];
+}
 const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
 function keywordsOf(w) {
   if (w.include) return w.include;
@@ -299,10 +319,12 @@ function matches(w, it) {
   const t = norm(it.title);
   const list = (s) => String(s || '').split(',').map(norm).filter(Boolean);
   if (list(w.exclude).some((x) => t.includes(x))) return false;
-  if (w.strict && isAccessory(it.title, String(keywordsOf(w)).split(','))) return false;
+  const kwsRaw = String(keywordsOf(w)).split(',').map((x) => x.trim()).filter(Boolean);
+  const kwsAll = [...kwsRaw, ...(kwsRaw.some((k) => norm(k) === 'ps5') ? ['playstation 5', 'play 5', 'ps 5'] : []), ...(kwsRaw.some((k) => norm(k) === 'ps4') ? ['playstation 4', 'play 4'] : [])];
+  if (w.strict && isAccessory(it.title, kwsAll)) return false;
   if (w.strict && it.price != null && it.price <= 1) return false; // prix symbolique (échange, recherche)
-  const incl = list(keywordsOf(w));
-  return !incl.length || incl.some((x) => t.includes(x)); // l'annonce doit contenir un des mots-clés
+  const incl = expandKw(list(keywordsOf(w)));
+  return !incl.length || incl.some((x) => t.includes(x)); // l'annonce doit contenir un des mots-clés (ou une variante)
 }
 
 // ---------- Notifications : Mac + téléphone (ntfy) ----------

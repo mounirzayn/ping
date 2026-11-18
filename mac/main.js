@@ -29,6 +29,7 @@ function load() {
   dataFile = path.join(app.getPath('userData'), 'ping-data.json');
   try { state = JSON.parse(fs.readFileSync(dataFile, 'utf8')); } catch { state = {}; }
   state = { watches: [], hits: [], unread: 0, ntfyTopic: '', desktopNotif: true, ...state };
+  if (state.update && state.update.status === 'installing') delete state.update;
   if (!state.v2) { // nouvelle lecture des annonces : on repart d'une base propre
     state.hits = []; state.unread = 0;
     state.watches.forEach((w) => { w.seen = []; w.primed = false; w.count = 0; });
@@ -434,7 +435,10 @@ async function installUpdate() {
     } else {
       spawn(file, [], { detached: true, stdio: 'ignore' }).unref(); // installeur Windows : installe puis relance Ping
     }
-    quitting = true; app.quit();
+    quitting = true;
+    try { fs.writeFileSync(dataFile, JSON.stringify({ ...state, update: undefined })); } catch {}
+    for (const bw of workers.values()) { try { if (!bw.isDestroyed()) bw.destroy(); } catch {} }
+    app.exit(0); // fermeture forcée : aucune page ne peut bloquer la mise à jour
   } catch (e) {
     state.update.status = 'error'; state.update.err = String(e.message || e); save();
   }
@@ -503,7 +507,7 @@ function buildTray() {
     { type: 'separator' },
     { label: state.watches.some((w) => w.active) ? 'Tout mettre en pause' : 'Tout reprendre', click: () => { toggleAll(); refresh(); } },
     { type: 'separator' },
-    { label: 'Quitter Ping', click: () => { quitting = true; app.quit(); } },
+    { label: 'Quitter Ping', click: () => { quitting = true; app.quit(); setTimeout(() => { try { fs.writeFileSync(dataFile, JSON.stringify(state)); } catch {} app.exit(0); }, 2500); } },
   ]));
   const toggleAll = () => { const any = state.watches.some((w) => w.active); state.watches.forEach((w) => (w.active = !any)); save(); scheduleAll(); };
   refresh();

@@ -43,6 +43,12 @@ function load() {
     state.unread = Math.min(state.unread, state.hits.length);
     state.v4 = true;
   }
+  if (!state.v5) { // filtre « uniquement l'objet » sur toutes les recherches de consoles / téléphones / ordis, puis nettoyage
+    state.watches.forEach((w) => { if (['consoles', 'telephones', 'informatique'].includes(w.cat)) w.strict = true; });
+    state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || matches(w, h); });
+    state.unread = Math.min(state.unread, state.hits.length);
+    state.v5 = true;
+  }
   if (!state.ntfyTopic) state.ntfyTopic = 'ping-' + crypto.randomBytes(9).toString('hex');
   save();
 }
@@ -253,10 +259,10 @@ function keywordsOf(w) {
 // Mode « uniquement l'objet » : écarte les accessoires / jeux vendus seuls (FR, EN, ES, IT)
 const ACC = new Set(['manette','manettes','controller','controllers','mando','mandos','controllo','dualsense','dualshock','coque','housse','funda','etui','case','cover','skin','skins','sticker','stickers','protection','chargeur','charger','cable','cables','support','socle','dock','casque','headset','volant','jeu','jeux','game','games','gioco','giochi','juego','juegos','boite','grip','grips','joystick','pochette','sacoche','ventilateur','telecommande','remote','camera','facade','plaque','piece','pieces','carte','disque','batterie','accessoire','accessoires']);
 const words = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
-const NOT_SALE = new Set(['recherche','recherches','cherche','cherchons','achete','achetons','achat','rachete','rachat','echange','echanges','troc','wanted','busco','cerco','suche','sucht','search','searching','looking','compro']);
+const NOT_SALE = new Set(['recherche','recherches','cherche','cherchons','achete','achetons','achat','rachete','rachat','echange','echanges','troc','wanted','busco','cerco','suche','sucht','search','searching','looking','compro','scambio','cambio','tausch','nettoyage','reparation','depannage','location','loue']);
 // Jeux vendus seuls : mot "jeu" n'importe où, ou nom de jeu connu, sans indice de console
-const GAME_WORDS = new Set(['jeu','jeux','game','games','gioco','giochi','juego','juegos','spiel','spiele','cartouche','pegi','steelbook']);
-const GAME_TITLES = ['fifa','fc 24','fc 25','fc 26','fc 27','ea sports','gta','grand theft auto','call of duty','black ops','modern warfare','warzone','spider man','spiderman','god of war','gran turismo','hogwarts','elden ring','assassin','ratchet','horizon','last of us','resident evil','mortal kombat','nba 2k','2k25','2k26','minecraft','zelda','mario','pokemon','sonic','crash bandicoot','ghost of tsushima','demon s souls','returnal','f1 2','f1 24','f1 25','battlefield','cyberpunk','red dead','diablo','final fantasy','street fighter','tekken','lego','just dance','sims','need for speed','forza','halo','starfield','astro bot','it takes two','split fiction','dragon ball','naruto','one piece','star wars','avatar','far cry','watch dogs','uncharted','death stranding','stellar blade','wukong','metal gear','silent hill','the crew','tomb raider','batman','hitman','dead space','dying light','sekiro','bloodborne','destiny','overwatch','rocket league','fortnite','valhalla','mirage','shadows','madden','ufc','wwe','pga','nhl','rayman','kingdom hearts','persona','yakuza','like a dragon','monster hunter','devil may cry','alan wake','lies of p','atomic heart','hollow knight','jedi','outlaws'];
+const GAME_WORDS = new Set(['jeu','jeux','game','games','gioco','giochi','juego','juegos','spiel','spiele','cartouche','pegi','steelbook','goty','remastered','remaster','dlc']);
+const GAME_TITLES = ['dead island','dredge','ultimate edition','deluxe edition','gold edition','game of the year','complete edition','definitive edition','collector','fifa','fc 24','fc 25','fc 26','fc 27','ea sports','gta','grand theft auto','call of duty','black ops','modern warfare','warzone','spider man','spiderman','god of war','gran turismo','hogwarts','elden ring','assassin','ratchet','horizon','last of us','resident evil','mortal kombat','nba 2k','2k25','2k26','minecraft','zelda','mario','pokemon','sonic','crash bandicoot','ghost of tsushima','demon s souls','returnal','f1 2','f1 24','f1 25','battlefield','cyberpunk','red dead','diablo','final fantasy','street fighter','tekken','lego','just dance','sims','need for speed','forza','halo','starfield','astro bot','it takes two','split fiction','dragon ball','naruto','one piece','star wars','avatar','far cry','watch dogs','uncharted','death stranding','stellar blade','wukong','metal gear','silent hill','the crew','tomb raider','batman','hitman','dead space','dying light','sekiro','bloodborne','destiny','overwatch','rocket league','fortnite','valhalla','mirage','shadows','madden','ufc','wwe','pga','nhl','rayman','kingdom hearts','persona','yakuza','like a dragon','monster hunter','devil may cry','alan wake','lies of p','atomic heart','hollow knight','jedi','outlaws'];
 const CONSOLE_HINT = /\b(console|konsole|consola|slim|pro|digital|digitale|standard|lecteur|bundle|pack|\d+\s?(go|gb|to|tb)|1to|2to|825)\b/;
 function isGame(title, keywords = []) {
   const ws = words(title); const flat = ' ' + ws.join(' ') + ' ';
@@ -269,7 +275,7 @@ function isGame(title, keywords = []) {
 function isAccessory(title, keywords) {
   const ws = words(title);
   if (isGame(title, keywords)) return true;
-  if (NOT_SALE.has(ws[0]) || / (contre|echange|troc) /.test(' ' + ws.join(' ') + ' ')) return true; // « Recherche PS5 », « PS5 contre PC »
+  if (NOT_SALE.has(ws[0]) || / (contre|echange|troc|scambio|cambio|tausch|nettoyage|reparation) /.test(' ' + ws.join(' ') + ' ')) return true; // « Recherche PS5 », « PS5 contre PC »
   if (ws.slice(0, 2).some((x) => ACC.has(x))) return true; // « Manette PS5 », « Funda rígida… »
   const flat = ' ' + ws.join(' ') + ' ';
   return keywords.some((k) => { const kw = words(k).join(' '); return kw && new RegExp(` (pour|para|for|per|compatible) (la |el |le |the |une |un )?${kw} `).test(flat); });

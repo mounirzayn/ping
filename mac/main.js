@@ -51,6 +51,9 @@ function load() {
     state.v5 = true;
   }
   if (!state.v6) { state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || matches(w, h); }); state.unread = Math.min(state.unread, state.hits.length); state.v6 = true; }
+  // À chaque démarrage : on repasse le flux au filtre actuel (les règles s'améliorent à chaque version)
+  state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || matches(w, h); });
+  state.unread = Math.min(state.unread, state.hits.length);
   if (!state.ntfyTopic) state.ntfyTopic = 'ping-' + crypto.randomBytes(9).toString('hex');
   save();
 }
@@ -182,7 +185,7 @@ function extractListings() {
     out.set(id, { id, site, url, title: title.slice(0, 140), price, img });
   }
   const head = (document.title + ' ' + (document.body ? document.body.innerText.slice(0, 600) : '')).toLowerCase();
-  const blocked = /captcha|datadome|verify you are human|vous êtes un robot|accès temporairement restreint|log in to continue|connecte-toi pour|se connecter à facebook/.test(head);
+  const blocked = /captcha|datadome|verify you are human|vous êtes un robot|accès temporairement restreint|log in to continue|connecte-toi pour|se connecter à facebook|pardon our interruption|checking your browser|access denied|accès refusé|robot check|êtes-vous un humain|vérification de sécurité|security check|unusual traffic/.test(head);
   return { items: [...out.values()], blocked };
 }
 

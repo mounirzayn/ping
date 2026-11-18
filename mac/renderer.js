@@ -163,8 +163,20 @@ $('#groups').onclick = async (e) => {
 };
 
 // ---------- Rendu global ----------
+// Son « ping » joué par l'appli à chaque nouvelle annonce
+let lastUnread = null;
+function ding() {
+  try {
+    const c = window.__ac || (window.__ac = new AudioContext());
+    [880, 1320].forEach((f, i) => { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = f; o.type = 'sine';
+      const t = c.currentTime + i * 0.12; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.4); });
+  } catch {}
+}
 function render(s) {
   if (s) S = s;
+  if (lastUnread !== null && S.unread > lastUnread && S.soundOn !== false && S.desktopNotif === false) ding(); // sinon la notification joue déjà le son
+  lastUnread = S.unread;
   renderFeed(); if (!editing) renderGroups();
   const active = S.watches.filter((w) => w.active);
   const blocked = active.filter((w) => w.status === 'blocked').length;
@@ -178,6 +190,7 @@ function render(s) {
   $('#topic').textContent = S.ntfyTopic;
   if (document.activeElement !== $('#topicEdit')) $('#topicEdit').value = S.ntfyTopic;
   $('#desktopNotif').checked = S.desktopNotif !== false;
+  $('#soundOn').checked = S.soundOn !== false;
   $('#ver').textContent = S.version || '';
   const u = S.update; $('#updBar').style.display = u ? 'flex' : 'none';
   if (u) {
@@ -201,6 +214,8 @@ $('#btnCopy').onclick = () => { navigator.clipboard.writeText($('#topic').textCo
 $('#btnTest').onclick = () => { act('testPush'); toast('Alerte de test envoyée'); };
 $('#btnPause').onclick = () => act('pauseAll');
 $('#desktopNotif').onchange = (e) => act('setDesktop', e.target.checked);
+$('#soundOn').onchange = (e) => act('setSound', e.target.checked);
+$('#btnSound').onclick = () => ding();
 $('#btnTopic').onclick = () => {
   const v = $('#topicEdit').value.trim().replace(/[^a-zA-Z0-9_-]/g, '');
   if (v.length < 6) return toast('6 caractères minimum');

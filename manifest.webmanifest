@@ -3,6 +3,8 @@
   "short_name": "Ping",
   "description": "Alertes instantanées sur les nouvelles annonces",
   "start_url": "app.html",
+  "scope": "./",
+  "id": "ping-espace",
   "display": "standalone",
   "background_color": "#0b0d12",
   "theme_color": "#0b0d12",

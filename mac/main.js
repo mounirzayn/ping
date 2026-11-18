@@ -289,7 +289,7 @@ function matches(w, it) {
 // ---------- Notifications : Mac + téléphone (ntfy) ----------
 function notify({ title, message, url, img, inApp }) {
   if (state.desktopNotif !== false && Notification.isSupported()) {
-    const n = new Notification({ title, body: message, silent: false });
+    const n = new Notification({ title, body: message, silent: state.soundOn === false, sound: IS_MAC && state.soundOn !== false ? 'Glass' : undefined });
     n.on('click', () => { if (inApp) openBrowser(url); else if (/^https:\/\//.test(url)) shell.openExternal(url); });
     n.show();
   }
@@ -372,6 +372,7 @@ function doAction(type, p, fromWeb = false) {
     case 'testPush': if (!fromWeb) notify({ title: '🔔 Test Ping', message: 'Si tu vois ce message, tes alertes sont prêtes.', url: 'https://ntfy.sh' }); break;
     case 'setTopic': if (!fromWeb) { state.ntfyTopic = p; save(); listenCmds(); pushState(); } break;
     case 'setDesktop': if (!fromWeb) { state.desktopNotif = !!p; save(); } break;
+    case 'setSound': if (!fromWeb) { state.soundOn = !!p; save(); } break;
     case 'openBrowser': if (!fromWeb) openBrowser(p); break;
     case 'openExternal': if (!fromWeb && /^https:\/\//.test(p)) shell.openExternal(p); break;
   }

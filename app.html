@@ -71,6 +71,11 @@ a.link{color:var(--acc)}
   <p class="muted" style="margin-top:18px">Astuce : dans l'appli Ping, « Copier le lien perso » te connecte directement.</p>
 </section>
 
+<div id="installBar" hidden style="background:#39ff88;color:#04120a;padding:calc(10px + env(safe-area-inset-top)) 16px 12px;font-size:14px;line-height:1.4">
+  <b>📲 Installe Ping sur ton iPhone</b> pour recevoir les alertes avec le son :<br>
+  touche <b>Partager</b> <span style="display:inline-block;border:1.5px solid #04120a;border-radius:4px;padding:0 4px;font-size:12px">⬆︎</span> en bas de Safari, puis <b>« Sur l'écran d'accueil »</b>. Ouvre ensuite Ping depuis l'icône.
+  <button id="installClose" style="float:right;background:none;border:0;font-size:18px;color:#04120a">✕</button>
+</div>
 <div id="appUi" hidden>
 <header>
   <div class="brand"><img src="icons/icon-192.png" alt="">Ping</div>
@@ -112,7 +117,12 @@ a.link{color:var(--acc)}
   <div class="view" id="v-more">
     <h2>Réglages</h2>
     <div class="card">
-      <p><b>Notifications sur l'iPhone</b></p>
+      <p><b>🔔 Alertes sur ce téléphone</b></p>
+      <p class="muted" id="pushState">Reçois une notification avec le son dès qu'une annonce sort, même appli fermée.</p>
+      <div class="acts"><button class="primary" id="pushOn" style="width:auto;padding:11px 18px;font-size:15px">Activer les alertes</button><button class="b" id="pushTest" hidden>Envoyer un test</button></div>
+    </div>
+    <div class="card">
+      <p><b>Notifications via l'appli ntfy (autre option)</b></p>
       <p class="muted">Installe l'appli gratuite <b>ntfy</b>, appuie sur +, et abonne-toi au canal : <b id="topicShow"></b></p>
       <div class="acts"><button class="b" id="copyTopic">Copier le canal</button></div>
     </div>
@@ -184,12 +194,14 @@ function handle(m, live) {
   if (m.topic === topic) {
     const h = parseHit(m); if (!h || hits.some((x) => x.id === h.id)) return;
     hits.push(h); hits.sort((a, b) => b.at - a.at);
-    if (live) { freshIds.add(h.id); if (navigator.vibrate) navigator.vibrate(60); }
+    if (live) { freshIds.add(h.id); ding(); if (navigator.vibrate) navigator.vibrate(60); }
     renderFeed();
   }
 }
 async function start() {
   $('#topicShow').textContent = topic;
+  renderPush();
+  if (pushSupported && Notification.permission === 'granted' && store.get('pingPush') === topic) subscribePush(true); // garde l'abonnement à jour
   renderFeed(); renderPings(); renderSync();
   try {
     const r = await fetch(`${NTFY}${topic},${topic}-etat/json?poll=1&since=12h`);
@@ -304,6 +316,61 @@ $('#newForm').onsubmit = async (e) => {
     go('pings');
   }
 };
+
+// ---------- Alertes push sur le téléphone (Web Push via ntfy) ----------
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function b64ToBytes(s) { const p = '='.repeat((4 - (s.length % 4)) % 4); const b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...b].map((c) => c.charCodeAt(0))); }
+async function subscribePush(silent) {
+  try {
+    const reg = await navigator.serviceWorker.register('sw.js');
+    await navigator.serviceWorker.ready;
+    let key = store.get('ntfyKey');
+    if (!key) { key = (await (await fetch(NTFY + 'v1/config')).json()).web_push_public_key; if (key) store.set('ntfyKey', key); }
+    if (!key) throw new Error('clé indisponible');
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+    const j = sub.toJSON();
+    const r = await fetch(NTFY + 'v1/webpush', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: j.endpoint, auth: j.keys.auth, p256dh: j.keys.p256dh, topics: [topic] }) });
+    if (!r.ok) throw new Error('inscription refusée (' + r.status + ')');
+    store.set('pingPush', topic);
+    renderPush();
+    if (!silent) toast('Alertes activées sur ce téléphone');
+  } catch (e) { if (!silent) toast('Impossible : ' + e.message); }
+}
+function renderPush() {
+  const st = $('#pushState'), on = $('#pushOn'), test = $('#pushTest');
+  if (isIOS && !standalone) { st.innerHTML = "Sur iPhone, les alertes marchent seulement depuis l'icône Ping de l'écran d'accueil. Touche <b>Partager</b> ⬆︎ puis <b>« Sur l'écran d'accueil »</b>, et ouvre Ping depuis l'icône."; on.hidden = true; return; }
+  if (!pushSupported) { st.textContent = "Ce navigateur ne gère pas les alertes. Utilise l'appli ntfy (ci-dessous)."; on.hidden = true; return; }
+  const active = Notification.permission === 'granted' && store.get('pingPush') === topic;
+  st.textContent = active ? '✅ Alertes actives sur ce téléphone, avec le son.' : Notification.permission === 'denied' ? 'Notifications bloquées : réglages de l\'iPhone > Notifications > Ping.' : "Reçois une notification avec le son dès qu'une annonce sort, même appli fermée.";
+  on.hidden = active; test.hidden = !active;
+}
+$('#pushOn').onclick = async () => {
+  if (!pushSupported) return renderPush();
+  const p = await Notification.requestPermission();
+  if (p !== 'granted') { renderPush(); return toast('Notifications refusées'); }
+  subscribePush(false);
+};
+$('#pushTest').onclick = async () => {
+  await fetch(NTFY, { method: 'POST', body: JSON.stringify({ topic, title: '🔔 Test Ping', message: 'Tes alertes arrivent bien sur ce téléphone.', priority: 5 }) });
+  toast('Test envoyé');
+};
+if (isIOS && !standalone && !store.get('installHidden')) { $('#installBar').hidden = false; }
+$('#installClose').onclick = () => { $('#installBar').hidden = true; store.set('installHidden', '1'); };
+
+// Son à l'arrivée d'une annonce quand l'espace est ouvert
+let audioCtx = null;
+document.addEventListener('click', () => { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch {} }, { once: true });
+function ding() {
+  try {
+    const c = audioCtx; if (!c) return;
+    [880, 1320].forEach((f, i) => { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = f; o.type = 'sine';
+      g.gain.setValueAtTime(0.0001, c.currentTime + i * 0.12); g.gain.exponentialRampToValueAtTime(0.25, c.currentTime + i * 0.12 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + i * 0.12 + 0.35);
+      o.connect(g).connect(c.destination); o.start(c.currentTime + i * 0.12); o.stop(c.currentTime + i * 0.12 + 0.4); });
+  } catch {}
+}
 
 // ---------- Navigation & réglages ----------
 function go(v) {

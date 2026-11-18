@@ -115,7 +115,7 @@ function renderGroups() {
       </div>
       <div style="display:flex;gap:6px"><button class="mini" data-gedit="${esc(ws.map((w) => w.id).join(','))}">Modifier</button><button class="mini" data-gdel="${esc(ws.map((w) => w.id).join(','))}">Supprimer</button></div></div>
       ${w0.strict ? '<div class="f" style="color:var(--acc)">✓ Uniquement l\'objet (accessoires ignorés)</div>' : ''}
-      <div class="edit" data-editbox="${esc(ws.map((w) => w.id).join(','))}" hidden>
+      <div class="edit" data-editbox="${esc(ws.map((w) => w.id).join(','))}" style="display:none">
         <label class="wide">Mots-clés<input data-k="include" value="${esc(w0.include || w0.name)}"></label>
         <label>Prix min (€)<input data-k="min" type="number" value="${esc(w0.min)}"></label>
         <label>Prix max (€)<input data-k="max" type="number" value="${esc(w0.max)}"></label>
@@ -141,7 +141,7 @@ function renderGroups() {
 let editing = false;
 $('#groups').onclick = async (e) => {
   const ed = e.target.closest('[data-gedit]');
-  if (ed) { const box = document.querySelector(`[data-editbox="${ed.dataset.gedit}"]`); box.hidden = !box.hidden; editing = !box.hidden; return; }
+  if (ed) { const box = document.querySelector(`[data-editbox="${ed.dataset.gedit}"]`); const open = box.style.display === 'none'; box.style.display = open ? 'grid' : 'none'; editing = open; return; }
   const sv = e.target.closest('[data-gsave]');
   if (sv) {
     const box = document.querySelector(`[data-editbox="${sv.dataset.gsave}"]`);

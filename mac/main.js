@@ -77,8 +77,39 @@ function updateBadge() {
 }
 
 // ---------- Planification ----------
-let chain = Promise.resolve();
-const enqueue = (fn) => (chain = chain.then(fn).catch((e) => console.error('[Ping]', e)));
+// File de vérification : 2 recherches en parallèle, chacune limitée dans le temps,
+// pour qu'une page qui ne répond plus ne bloque jamais les autres.
+const MAX_PARALLEL = 2, CHECK_TIMEOUT = 75000;
+const queue = []; const busy = new Set(); let running = 0;
+function enqueue(fn, id) {
+  if (id && (busy.has(id) || queue.some((q) => q.id === id))) return; // déjà prévue
+  queue.push({ fn, id }); pump();
+}
+function pump() {
+  while (running < MAX_PARALLEL && queue.length) {
+    const { fn, id } = queue.shift(); running++; if (id) busy.add(id);
+    let to;
+    const timeout = new Promise((_, rej) => { to = setTimeout(() => rej(new Error('timeout')), CHECK_TIMEOUT); });
+    Promise.race([Promise.resolve().then(fn), timeout])
+      .catch((e) => {
+        console.error('[Ping]', e);
+        if (id && String(e.message) === 'timeout') onCheckTimeout(id);
+      })
+      .finally(() => { clearTimeout(to); running--; if (id) busy.delete(id); pump(); });
+  }
+}
+function onCheckTimeout(id) {
+  const bw = workers.get(id); if (bw && !bw.isDestroyed()) bw.destroy(); workers.delete(id);
+  const w = state.watches.find((x) => x.id === id); if (!w) return;
+  w.status = 'error'; w.statusMsg = 'La page ne répond pas, nouvel essai bientôt'; w.lastCheck = Date.now();
+  save(); if (w.active) scheduleNext(w, 1.5);
+}
+const withTimeout = (p, ms, fallback) => Promise.race([p, sleep(ms).then(() => fallback)]);
+// Filet de sécurité : toute recherche active sans prochain passage prévu est relancée
+setInterval(() => {
+  state.watches.filter((w) => w.active && !timers.has(w.id) && !busy.has(w.id) && !queue.some((q) => q.id === w.id))
+    .forEach((w, i) => schedule(w.id, 2000 + i * 5000));
+}, 60000);
 
 function scheduleAll() {
   timers.forEach(clearTimeout); timers.clear();
@@ -91,7 +122,7 @@ function scheduleAll() {
 }
 function schedule(id, delay) {
   clearTimeout(timers.get(id));
-  timers.set(id, setTimeout(() => enqueue(() => check(id)), delay));
+  timers.set(id, setTimeout(() => { timers.delete(id); enqueue(() => check(id), id); }, delay));
 }
 function scheduleNext(w, factor = 1) {
   const base = Math.max(MIN_INTERVAL, w.interval || 60) * factor;
@@ -210,12 +241,13 @@ async function check(id, manual = false) {
     await sleep(2500 + Math.random() * 1500);
     // petit défilement pour charger les vignettes paresseuses
     for (const y of [700, 1400, 2100]) {
-      await bw.webContents.executeJavaScript(`window.scrollTo(0, ${y}); true`).catch(() => {});
+      await withTimeout(bw.webContents.executeJavaScript(`window.scrollTo(0, ${y}); true`).catch(() => {}), 5000);
       await sleep(450);
     }
-    result = await bw.webContents.executeJavaScript(`(${extractListings.toString()})()`);
+    result = await withTimeout(bw.webContents.executeJavaScript(`(${extractListings.toString()})()`), 20000, null);
+    if (!result) throw new Error('La page ne répond pas');
   } catch (e) {
-    result.error = String(e.message || e);
+    result = { items: [], blocked: false, error: String(e.message || e) };
   }
 
   w = state.watches.find((x) => x.id === id);
@@ -392,7 +424,7 @@ function doAction(type, p, fromWeb = false) {
     }
     case 'toggle': { const w = find(p); if (w) { w.active = !w.active; save(); scheduleAll(); } break; }
     case 'delete': state.watches = state.watches.filter((w) => w.id !== p); save(); scheduleAll(); break;
-    case 'checkNow': if (find(p)) enqueue(() => check(p, true)); break;
+    case 'checkNow': if (find(p)) enqueue(() => check(p, true), p); break;
     case 'pauseAll': { const any = state.watches.some((w) => w.active); state.watches.forEach((w) => (w.active = !any)); save(); scheduleAll(); break; }
     case 'refresh': pushState(); break;
     case 'installUpdate': if (!fromWeb) installUpdate(); break;
@@ -500,9 +532,20 @@ function maybePushState() {
 }
 function pushState() {
   if (!state.ntfyTopic) return;
-  let body = JSON.stringify(compactState());
-  if (body.length > 3900) body = JSON.stringify(compactState(false));
-  fetch(NTFY + state.ntfyTopic + '-etat', { method: 'POST', body }).catch(() => {});
+  // ntfy limite un message à 4 Ko : au-delà il devient une pièce jointe illisible pour le téléphone.
+  // Avec beaucoup de recherches on découpe donc l'état en plusieurs messages (le site les réassemble).
+  const full = compactState(), MAX = 3800;
+  const parts = []; let cur = [];
+  const size = (w) => JSON.stringify({ v: 2, at: full.at, k: 99, n: 99, w }).length;
+  for (const w of full.w) {
+    if (size([...cur, w]) > MAX) {
+      if (size([w]) > MAX) delete w.u; // lien trop long : le site le montrera sans le bouton
+      if (cur.length) { parts.push(cur); cur = []; }
+    }
+    cur.push(w);
+  }
+  parts.push(cur);
+  parts.forEach((w, k) => fetch(NTFY + state.ntfyTopic + '-etat', { method: 'POST', body: JSON.stringify({ v: 2, at: full.at, k, n: parts.length, w }) }).catch(() => {}));
 }
 async function listenCmds() {
   if (cmdAbort) cmdAbort.abort();

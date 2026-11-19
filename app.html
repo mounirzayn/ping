@@ -185,10 +185,20 @@ function parseHit(m) {
   const [title, site] = (m.message || '').split('\n');
   return { id: m.id, at: m.time * 1000, price, watch, title, site: site || '', url: m.click, img: m.attachment ? m.attachment.url : null };
 }
+const etatParts = {};
 function handle(m, live) {
   if (m.event !== 'message') return;
   if (m.topic === topic + '-etat') {
-    try { const s = JSON.parse(m.message); if (!etat || s.at >= etat.at) { etat = s; renderPings(); renderSync(); } } catch {}
+    try {
+      let s = JSON.parse(m.message);
+      if (s.v === 2) { // état découpé en plusieurs messages : on attend toutes les parties
+        const b = (etatParts[s.at] = etatParts[s.at] || {}); b[s.k] = s.w;
+        if (Object.keys(b).length < s.n) return;
+        s = { v: 2, at: s.at, w: [].concat(...Array.from({ length: s.n }, (_, i) => b[i])) };
+        Object.keys(etatParts).forEach((t) => { if (+t <= s.at) delete etatParts[t]; });
+      }
+      if (!etat || s.at >= etat.at) { etat = s; renderPings(); renderSync(); }
+    } catch {}
     return;
   }
   if (m.topic === topic) {
@@ -267,7 +277,7 @@ function renderPings() {
       <div class="w"><div>
         <div class="t">${esc(w.n)}<span class="tag">${esc(w.s)}</span></div>
         <div class="m">${esc(CATS[w.c]?.label || '')}${w.mi || w.ma ? ` · ${w.mi || 0} à ${w.ma || '∞'} €` : ''} · toutes les ${w.i} s · ${w.ct} alerte(s)</div>
-        <div class="m ${w.a ? 'st-' + esc(w.st) : ''}">${w.a ? esc(STATUS[w.st] || '') : 'En pause'}</div>
+        <div class="m ${w.a ? 'st-' + esc(w.st) : ''}">${w.a ? esc(STATUS[w.st] || '') + (w.lc ? ' · dernier passage ' + ago(w.lc) : '') : 'En pause'}</div>
       </div></div>
       <div class="acts">
         <button class="b" data-a="toggle" data-id="${esc(w.id)}">${w.a ? 'Pause' : 'Reprendre'}</button>

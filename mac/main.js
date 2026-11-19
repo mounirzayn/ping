@@ -51,6 +51,14 @@ function load() {
     state.v5 = true;
   }
   if (!state.v6) { state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || matches(w, h); }); state.unread = Math.min(state.unread, state.hits.length); state.v6 = true; }
+  if (!state.v7) { // Marketplace : recherches fixées sur Paris (et pas la position du compte Facebook)
+    state.watches.forEach((w) => {
+      if (w.site !== 'fb' || /\/marketplace\/[a-z-]+\/(search|vehicles|property)/.test(w.url)) return;
+      w.url = w.url.replace('/marketplace/category/', '/marketplace/paris/').replace('/marketplace/search', '/marketplace/paris/search');
+      w.seen = []; w.primed = false;
+    });
+    state.v7 = true;
+  }
   // À chaque démarrage : on repasse le flux au filtre actuel (les règles s'améliorent à chaque version)
   state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, coteForWatch(w))); });
   state.unread = Math.min(state.unread, state.hits.length);
@@ -401,7 +409,7 @@ function isAccessory(title, keywords) {
   const flatAll = ' ' + ws.join(' ') + ' ';
   const startsWithKw = keywords.some((k) => { const kw = words(k).join(' '); return kw && flatAll.startsWith(' ' + kw + ' '); });
   if (!CONSOLE_HINT.test(flatAll) && !startsWithKw && ws.some((x) => ACC.has(x))) return true;
-  if (NOT_SALE.has(ws[0]) || / (contre|echange|troc|scambio|cambio|tausch|nettoyage|reparation) /.test(' ' + ws.join(' ') + ' ')) return true; // « Recherche PS5 », « PS5 contre PC »
+  if (NOT_SALE.has(ws[0]) || (['je', 'j', 'on', 'nous'].includes(ws[0]) && NOT_SALE.has(ws[1])) || / (contre|echange|troc|scambio|cambio|tausch|nettoyage|reparation) /.test(' ' + ws.join(' ') + ' ')) return true; // « Recherche PS5 », « PS5 contre PC »
   if (ws.slice(0, 2).some((x) => ACC.has(x))) return true; // « Manette PS5 », « Funda rígida… »
   const flat = ' ' + ws.join(' ') + ' ';
   return keywords.some((k) => { const kw = words(k).join(' '); return kw && new RegExp(` (pour|para|for|per|compatible) (la |el |le |the |une |un )?${kw} `).test(flat); });
@@ -415,6 +423,7 @@ function matches(w, it) {
   const kwsRaw = String(keywordsOf(w)).split(',').map((x) => x.trim()).filter(Boolean);
   const kwsAll = [...kwsRaw, ...(kwsRaw.some((k) => norm(k) === 'ps5') ? ['playstation 5', 'play 5', 'ps 5'] : []), ...(kwsRaw.some((k) => norm(k) === 'ps4') ? ['playstation 4', 'play 4'] : [])];
   if (w.strict && isAccessory(it.title, kwsAll)) return false;
+  if (/\$\s?US|\bUSD\b|\bUS\$/i.test(it.title || '')) return false; // annonce à l'étranger (Marketplace)
   if (w.strict && it.price != null && it.price <= 1) return false; // prix symbolique (échange, recherche)
   // Prix plancher : une console (ou tout objet cherché) vendue à moins du quart du budget max, c'est presque toujours
   // un jeu, une boîte vide ou un accessoire. Ex. budget 300 € : on ignore ce qui est sous 75 €.

@@ -79,8 +79,9 @@
       if (min || max) u.searchParams.set('price', `${min || 'min'}-${max || 'max'}`);
       u.searchParams.set('sort', 'time'); u.searchParams.set('order', 'desc');
     } else if (site === 'fb') {
-      const path = g === 'vehicules' ? 'category/vehicles' : catKey === 'immo_location' || catKey === 'colocation' ? 'category/propertyrentals' : catKey === 'immo_vente' ? 'category/propertyforsale' : 'search/';
-      u = new URL('https://www.facebook.com/marketplace/' + path);
+      // Ville dans le chemin : sinon Facebook prend la position du compte (parfois à l'étranger)
+      const path = g === 'vehicules' ? 'vehicles' : catKey === 'immo_location' || catKey === 'colocation' ? 'propertyrentals' : catKey === 'immo_vente' ? 'propertyforsale' : 'search/';
+      u = new URL('https://www.facebook.com/marketplace/paris/' + path);
       if (q || path === 'search/') u.searchParams.set('query', query);
       u.searchParams.set('sortBy', 'creation_time_descend');
       if (min) u.searchParams.set('minPrice', min); if (max) u.searchParams.set('maxPrice', max);

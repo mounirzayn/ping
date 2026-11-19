@@ -28,5 +28,10 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || './app.html';
-  event.waitUntil(self.clients.openWindow(url));
+  event.waitUntil((async () => {
+    // l'appli Ping se met à jour dès qu'on touche une alerte, puis l'annonce s'ouvre
+    const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    list.forEach((c) => c.postMessage('refresh'));
+    return self.clients.openWindow(url);
+  })());
 });

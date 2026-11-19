@@ -16,6 +16,8 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
 body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+
+.refresh{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:#161a23;color:var(--txt);font-size:20px;line-height:1;cursor:pointer;display:grid;place-items:center;padding:0}.refresh.spin{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 header{position:sticky;top:0;z-index:5;background:rgba(11,13,18,.9);backdrop-filter:blur(12px);padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
 .brand{display:flex;gap:9px;align-items:center;font-weight:800;font-size:20px;letter-spacing:-.4px}.brand img{width:28px;border-radius:7px}
 .sync{font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
@@ -80,7 +82,7 @@ a.link{color:var(--acc)}
 <div id="appUi" hidden>
 <header>
   <div class="brand"><img src="icons/icon-192.png" alt="">Ping</div>
-  <div class="sync"><span id="syncDot" class="dot"></span><span id="syncTxt">Connexion…</span></div>
+  <div style="display:flex;align-items:center;gap:10px"><div class="sync"><span id="syncDot" class="dot"></span><span id="syncTxt">Connexion…</span></div><button id="refreshBtn" class="refresh" aria-label="Actualiser" title="Actualiser">↻</button></div>
 </header>
 <main>
   <div class="view on" id="v-feed">
@@ -231,7 +233,34 @@ function listen() {
   es.onmessage = (e) => { try { handle(JSON.parse(e.data), true); } catch {} };
   es.onerror = () => { renderSync(); };
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && topic) { if (!es || es.readyState === 2) listen(); renderSync(); } });
+// iOS coupe la connexion en direct quand l'appli passe en arrière-plan, sans le signaler :
+// à chaque retour au premier plan (et avec le bouton ↻) on relit les dernières annonces et on se reconnecte.
+let refreshing = false, lastRefresh = 0;
+async function refresh(manual = false) {
+  if (!topic || refreshing) return;
+  if (!manual && Date.now() - lastRefresh < 3000) return;
+  refreshing = true; lastRefresh = Date.now();
+  const btn = $('#refreshBtn'); if (btn) btn.classList.add('spin');
+  const before = new Set(hits.map((h) => h.id));
+  try {
+    const r = await fetch(`${NTFY}${topic},${topic}-etat/json?poll=1&since=12h`, { cache: 'no-store' });
+    const txt = await r.text();
+    txt.split('\n').filter(Boolean).forEach((l) => { try { handle(JSON.parse(l), false); } catch {} });
+    const added = hits.filter((h) => !before.has(h.id));
+    added.forEach((h) => freshIds.add(h.id));
+    renderFeed(); renderPings(); renderSync();
+    if (manual) toast(added.length ? `${added.length} nouvelle(s) annonce(s)` : 'À jour');
+    if (manual) send('refresh'); // demande aussi à l'ordinateur un état tout frais
+  } catch { if (manual) toast('Connexion impossible'); }
+  listen();
+  refreshing = false; if (btn) btn.classList.remove('spin');
+}
+$('#refreshBtn').onclick = () => refresh(true);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+window.addEventListener('pageshow', () => refresh());
+window.addEventListener('focus', () => refresh());
+if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data === 'refresh') refresh(); });
+setInterval(() => { if (!document.hidden) refresh(); }, 60000); // filet de sécurité
 
 $('#feed').addEventListener('click', (e) => {
   const x = e.target.closest('[data-hide]'); if (!x) return;

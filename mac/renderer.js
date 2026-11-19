@@ -64,6 +64,19 @@ $('#btnAdd').onclick = async () => {
   go('pings');
 };
 
+// ---------- Cote du marché ----------
+function coteOfHit(h) {
+  const w = S.watches.find((x) => x.id === h.watchId);
+  const c = w && S.cotes ? S.cotes[w.group || w.id] : null;
+  return c ? c.med : h.cote || null;
+}
+function coteBadge(price, cote) {
+  if (!cote || price == null) return '';
+  const d = Math.round(((price - cote) / cote) * 100);
+  const cls = d <= -10 ? 'good' : d >= 10 ? 'high' : 'mid';
+  return `<span class="cote ${cls}" title="Prix médian des annonces similaires">cote ~${eur(cote)} · ${d > 0 ? '+' : ''}${d} %</span>`;
+}
+
 // ---------- Annonces ----------
 function renderFeed() {
   const el = $('#feed');
@@ -76,7 +89,7 @@ function renderFeed() {
     <div class="hit ${i < S.unread ? 'new' : ''}">
       <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : 'Pas de photo'}<span class="site s-${esc(h.site)}">${esc(h.site)}</span><button class="del" data-del="${esc(h.id)}" title="Supprimer cette annonce">✕</button></div>
       <div class="b">
-        <div class="p">${eur(h.price)}</div>
+        <div class="p">${eur(h.price)} ${coteBadge(h.price, coteOfHit(h))}</div>
         <div class="t">${esc(h.title)}</div>
         <div class="m">${esc(h.watchName)} · ${ago(h.at)}</div>
         <div class="go"><button data-ext="${esc(h.url)}">Voir l'annonce ↗</button></div>
@@ -112,6 +125,7 @@ function renderGroups() {
         <h3>${esc(w0.include || w0.name)}${w0.city ? ' · ' + esc(w0.city) : ''}</h3>${/leboncoin|facebook|vinted|ebay/.test(w0.url) ? '' : `<div class="f">Lien perso : ${esc(w0.url.slice(0, 60))}…</div>`}
         <div class="f">${esc(CATS[w0.cat]?.label || '')}${price} · toutes les ${w0.interval >= 60 ? w0.interval / 60 + ' min' : w0.interval + ' s'}${w0.exclude ? ' · sans : ' + esc(w0.exclude) : ''}</div>
         <div class="f">${total} nouvelle(s) annonce(s) trouvée(s)</div>
+        <div class="f">${(() => { const c = S.cotes && S.cotes[w0.group || w0.id]; return c ? `Cote du marché : <b style="color:var(--txt)">~${eur(c.med)}</b> (sur ${c.n} annonces)` : 'Cote du marché : calcul en cours…'; })()}</div>
       </div>
       <div style="display:flex;gap:6px"><button class="mini" data-gedit="${esc(ws.map((w) => w.id).join(','))}">Modifier</button><button class="mini" data-gdel="${esc(ws.map((w) => w.id).join(','))}">Supprimer</button></div></div>
       ${w0.strict ? '<div class="f" style="color:var(--acc)">✓ Uniquement l\'objet (accessoires ignorés)</div>' : ''}

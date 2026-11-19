@@ -64,7 +64,7 @@ function save() {
   broadcast();
   maybePushState();
 }
-const publicState = () => ({ ...state, siteUrl: SITE, version: BUILD.tag || 'dev', watches: state.watches.map(({ seen, ...w }) => w) });
+const publicState = () => ({ ...state, siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
 function broadcast() {
   BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('state', publicState()); });
   updateBadge();
@@ -230,6 +230,55 @@ function getWorker(id) {
   return bw;
 }
 
+// ---------- Cote du marché ----------
+// Toutes les 6 h, chaque recherche relit sa page SANS filtre de prix et garde le prix des objets
+// qui passent les mêmes filtres (mots-clés, objet seul). La médiane de ces prix = la cote.
+const COTE_EVERY = 6 * 3600 * 1000;
+const median = (a) => { const b = [...a].sort((x, y) => x - y); const m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+function coteOf(prices) {
+  let p = prices.filter((x) => x > 1);
+  if (p.length < 6) return null;
+  const m0 = median(p);
+  p = p.filter((x) => x >= m0 * 0.35 && x <= m0 * 2.5); // jeux à 10 € ou lots à 2 000 € : hors cote
+  if (p.length < 6) return null;
+  return { med: Math.round(median(p)), n: p.length };
+}
+function groupCotes() {
+  const by = {};
+  for (const w of state.watches) {
+    if (!w.cote || !w.cote.p) continue;
+    const g = w.group || w.id; (by[g] = by[g] || { p: [], at: 0 });
+    by[g].p.push(...w.cote.p); by[g].at = Math.max(by[g].at, w.cote.at);
+  }
+  const out = {};
+  for (const [g, v] of Object.entries(by)) { const c = coteOf(v.p); if (c) out[g] = { ...c, at: v.at }; }
+  return out;
+}
+const coteForWatch = (w) => groupCotes()[w.group || w.id] || null;
+async function checkCote(id) {
+  const w0 = state.watches.find((x) => x.id === id); if (!w0) return;
+  const url = rewriteUrl(w0.url, '', '', '');
+  const key = 'cote:' + id;
+  let items = [];
+  try {
+    const bw = getWorker(key);
+    await Promise.race([bw.loadURL(url).catch(() => {}), sleep(30000)]);
+    await sleep(2500 + Math.random() * 1500);
+    for (const y of [700, 1400, 2100, 2800]) {
+      await withTimeout(bw.webContents.executeJavaScript(`window.scrollTo(0, ${y}); true`).catch(() => {}), 5000);
+      await sleep(450);
+    }
+    const r = await withTimeout(bw.webContents.executeJavaScript(`(${extractListings.toString()})()`), 20000, null);
+    if (r && !r.blocked) items = r.items || [];
+  } catch {}
+  const bw = workers.get(key); if (bw && !bw.isDestroyed()) bw.destroy(); workers.delete(key);
+  const w = state.watches.find((x) => x.id === id); if (!w) return;
+  const free = { ...w, min: '', max: '' };
+  const prices = items.filter((it) => it.price != null && matches(free, it)).map((it) => it.price);
+  w.cote = { p: prices.slice(0, 80), at: Date.now() };
+  save();
+}
+
 // ---------- Vérification ----------
 async function check(id, manual = false) {
   let w = state.watches.find((x) => x.id === id);
@@ -273,6 +322,7 @@ async function check(id, manual = false) {
   }
 
   w.status = 'ok'; w.statusMsg = ''; w.blockedNotified = false;
+  if (!w.cote || Date.now() - w.cote.at > COTE_EVERY) enqueue(() => checkCote(w.id), 'cote:' + w.id);
   const seen = new Set(w.seen || []);
   const fresh = result.items.filter((it) => !seen.has(it.id));
   result.items.forEach((it) => seen.add(it.id));
@@ -281,14 +331,15 @@ async function check(id, manual = false) {
   w.primed = true; // premier passage : mémorise l'existant sans notifier
   w.count = (w.count || 0) + hits.length;
 
-  const stamped = hits.map((h) => ({ ...h, watchId: w.id, watchName: w.name, cat: w.cat, at: Date.now() }));
+  const cote = coteForWatch(w);
+  const stamped = hits.map((h) => ({ ...h, watchId: w.id, watchName: w.name, cat: w.cat, at: Date.now(), cote: cote ? cote.med : null }));
   state.hits = [...stamped, ...state.hits].slice(0, MAX_HITS);
   state.unread += stamped.length;
   save();
 
   stamped.slice(0, MAX_NOTIF_PER_CYCLE).forEach((h) => notify({
     title: `🔔 ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.name}`,
-    message: `${h.title}\n${h.site}`,
+    message: `${h.title}\n${h.site}${coteLine(h.price, h.cote)}`,
     url: h.url, img: h.img,
   }));
   if (w.active) scheduleNext(w);
@@ -369,6 +420,12 @@ function matches(w, it) {
   return !incl.length || incl.some((x) => t.includes(x)); // l'annonce doit contenir un des mots-clés (ou une variante)
 }
 
+function coteLine(price, cote) {
+  if (!cote || price == null) return '';
+  const d = Math.round(((price - cote) / cote) * 100);
+  return `\nCote ~${cote.toLocaleString('fr-FR')} € · ${d > 0 ? '+' : ''}${d} %`;
+}
+
 // ---------- Notifications : Mac + téléphone (ntfy) ----------
 function notify({ title, message, url, img, inApp }) {
   if (state.desktopNotif !== false && Notification.isSupported()) {
@@ -446,7 +503,7 @@ function doAction(type, p, fromWeb = false) {
         if (p.min !== undefined) w.min = p.min; if (p.max !== undefined) w.max = p.max;
         if (p.strict !== undefined) w.strict = !!p.strict;
         w.url = rewriteUrl(w.url, String(w.include || '').split(',')[0].trim(), w.min, w.max);
-        w.seen = []; w.primed = false; // nouvelle base pour ne pas notifier d'anciennes annonces
+        w.seen = []; w.primed = false; w.cote = null; // nouvelle base (et nouvelle cote)
       });
       scheduleAll();
       save(); break;
@@ -526,12 +583,12 @@ let lastSig = '', stateTimer = null, cmdAbort = null;
 function compactState(withUrl = true) {
   return { v: 1, at: Date.now(), w: state.watches.map((w) => ({
     id: w.id, n: w.name, s: w.site, c: w.cat, mi: w.min, ma: w.max, i: w.interval, a: w.active ? 1 : 0,
-    st: w.status, ct: w.count || 0, lc: w.lastCheck || 0, ...(withUrl ? { u: w.url } : {}),
+    st: w.status, ct: w.count || 0, lc: w.lastCheck || 0, co: (coteForWatch(w) || {}).med || 0, ...(withUrl ? { u: w.url } : {}),
   })) };
 }
 function maybePushState() {
   // n'envoie que sur un vrai changement (économise le quota ntfy)
-  const sig = JSON.stringify(state.watches.map((w) => [w.id, w.name, w.active, w.status, w.count, w.min, w.max, w.interval]));
+  const sig = JSON.stringify(state.watches.map((w) => [w.id, w.name, w.active, w.status, w.count, w.min, w.max, w.interval, w.cote && w.cote.at]));
   if (sig === lastSig) return;
   lastSig = sig;
   clearTimeout(stateTimer);

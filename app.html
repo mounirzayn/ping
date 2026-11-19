@@ -30,6 +30,7 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);m
 .hit{display:flex;gap:12px;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:10px;align-items:center}
 .hit .img{width:84px;height:84px;border-radius:10px;flex:none;background:#1a1e28 center/cover no-repeat;display:grid;place-items:center;color:var(--mut);font-size:22px}
 .hit .p{color:var(--acc);font-weight:800;font-size:18px}
+.cote{display:inline-block;margin-left:4px;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:middle}.cote.good{background:rgba(61,255,140,.15);color:#3dff8c}.cote.mid{background:rgba(139,147,167,.18);color:#c3c9d6}.cote.high{background:rgba(255,140,60,.15);color:#ff9a4d}
 .hit .t{font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hit .m{color:var(--mut);font-size:12px;margin-top:3px}
 .hit{position:relative}.hit .x{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:99px;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:13px}
@@ -182,8 +183,10 @@ function parseHit(m) {
   const pm = m.title.match(/🔔\s*([\d\s  .,]+)\s*€/);
   const price = pm ? parseFloat(pm[1].replace(/[\s  .]/g, '').replace(',', '.')) : null;
   const watch = m.title.split('·').slice(pm ? 1 : 0).join('·').replace('🔔', '').trim();
-  const [title, site] = (m.message || '').split('\n');
-  return { id: m.id, at: m.time * 1000, price, watch, title, site: site || '', url: m.click, img: m.attachment ? m.attachment.url : null };
+  const [title, site, coteL] = (m.message || '').split('\n');
+  const cm = (coteL || '').match(/Cote ~([\d\s\u202f\u00a0.,]+)\s*€/);
+  const cote = cm ? parseFloat(cm[1].replace(/[\s\u202f\u00a0.]/g, '').replace(',', '.')) : null;
+  return { id: m.id, at: m.time * 1000, price, watch, title, site: site || '', url: m.click, img: m.attachment ? m.attachment.url : null, cote };
 }
 const etatParts = {};
 function handle(m, live) {
@@ -252,6 +255,12 @@ function renderSync() {
   dot.className = 'dot ' + (old ? 'off' : 'on');
   txt.textContent = (old ? 'Mac hors ligne ? ' : 'Mac connecté · ') + ago(etat.at);
 }
+function coteBadge(price, cote) {
+  if (!cote || price == null) return '';
+  const d = Math.round(((price - cote) / cote) * 100);
+  const cls = d <= -10 ? 'good' : d >= 10 ? 'high' : 'mid';
+  return `<span class="cote ${cls}">cote ~${cote.toLocaleString('fr-FR')} € · ${d > 0 ? '+' : ''}${d} %</span>`;
+}
 function renderFeed() {
   const el = $('#feed');
   const shown = hits.filter((h) => !hidden.has(h.id));
@@ -261,7 +270,7 @@ function renderFeed() {
       <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : '🔔'}</div>
       <button class="x" data-hide="${esc(h.id)}" aria-label="Supprimer">✕</button>
       <div style="min-width:0">
-        <div class="p">${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : 'Prix ?'}</div>
+        <div class="p">${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : 'Prix ?'} ${coteBadge(h.price, h.cote)}</div>
         <div class="t">${esc(h.title)}</div>
         <div class="m">${esc(h.site)} · ${esc(h.watch)} · ${ago(h.at)}</div>
       </div>
@@ -276,7 +285,7 @@ function renderPings() {
     <div class="card">
       <div class="w"><div>
         <div class="t">${esc(w.n)}<span class="tag">${esc(w.s)}</span></div>
-        <div class="m">${esc(CATS[w.c]?.label || '')}${w.mi || w.ma ? ` · ${w.mi || 0} à ${w.ma || '∞'} €` : ''} · toutes les ${w.i} s · ${w.ct} alerte(s)</div>
+        <div class="m">${esc(CATS[w.c]?.label || '')}${w.mi || w.ma ? ` · ${w.mi || 0} à ${w.ma || '∞'} €` : ''} · toutes les ${w.i} s · ${w.ct} alerte(s)${w.co ? ` · cote ~${w.co.toLocaleString('fr-FR')} €` : ''}</div>
         <div class="m ${w.a ? 'st-' + esc(w.st) : ''}">${w.a ? esc(STATUS[w.st] || '') + (w.lc ? ' · dernier passage ' + ago(w.lc) : '') : 'En pause'}</div>
       </div></div>
       <div class="acts">

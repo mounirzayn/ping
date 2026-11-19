@@ -40,19 +40,19 @@ function load() {
     state.v3 = true;
   }
   if (!state.v4) { // nettoie le flux avec le nouveau filtre (jeux vendus seuls)
-    state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || matches(w, h); });
+    state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, coteForWatch(w))); });
     state.unread = Math.min(state.unread, state.hits.length);
     state.v4 = true;
   }
   if (!state.v5) { // filtre « uniquement l'objet » sur toutes les recherches de consoles / téléphones / ordis, puis nettoyage
     state.watches.forEach((w) => { if (['consoles', 'telephones', 'informatique'].includes(w.cat)) w.strict = true; });
-    state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || matches(w, h); });
+    state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, coteForWatch(w))); });
     state.unread = Math.min(state.unread, state.hits.length);
     state.v5 = true;
   }
   if (!state.v6) { state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || matches(w, h); }); state.unread = Math.min(state.unread, state.hits.length); state.v6 = true; }
   // À chaque démarrage : on repasse le flux au filtre actuel (les règles s'améliorent à chaque version)
-  state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || matches(w, h); });
+  state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, coteForWatch(w))); });
   state.unread = Math.min(state.unread, state.hits.length);
   if (!state.ntfyTopic) state.ntfyTopic = 'ping-' + crypto.randomBytes(9).toString('hex');
   save();
@@ -255,6 +255,8 @@ function groupCotes() {
   return out;
 }
 const coteForWatch = (w) => groupCotes()[w.group || w.id] || null;
+// Mode objet seul : bien en dessous de la cote = presque toujours un accessoire, une pièce ou une arnaque
+const belowCote = (w, it, c) => !!(w.strict && c && it.price != null && it.price < c.med * 0.4);
 async function checkCote(id) {
   const w0 = state.watches.find((x) => x.id === id); if (!w0) return;
   const url = rewriteUrl(w0.url, '', '', '');
@@ -327,7 +329,8 @@ async function check(id, manual = false) {
   const fresh = result.items.filter((it) => !seen.has(it.id));
   result.items.forEach((it) => seen.add(it.id));
   w.seen = [...seen].slice(-MAX_SEEN);
-  const hits = w.primed ? fresh.filter((it) => matches(w, it)) : [];
+  const cote0 = coteForWatch(w);
+  const hits = w.primed ? fresh.filter((it) => matches(w, it) && !belowCote(w, it, cote0)) : [];
   w.primed = true; // premier passage : mémorise l'existant sans notifier
   w.count = (w.count || 0) + hits.length;
 
@@ -365,9 +368,9 @@ function keywordsOf(w) {
   try { const u = new URL(w.url); return u.searchParams.get('text') || u.searchParams.get('query') || u.searchParams.get('search_text') || u.searchParams.get('_nkw') || ''; } catch { return ''; }
 }
 // Mode « uniquement l'objet » : écarte les accessoires / jeux vendus seuls (FR, EN, ES, IT)
-const ACC = new Set(['volante','lenkrad','thrustmaster','metalbox','blister','mannete','manete','manetta','speicherkarte','speicher','storage','expansion','seagate','ssd','memoire','caja','scatola','doos','karton','vacia','vuota','vide','leer','empty','box','emballage','carton','manette','manettes','controller','controllers','mando','mandos','controllo','dualsense','dualshock','coque','housse','funda','etui','case','cover','skin','skins','sticker','stickers','protection','chargeur','charger','cable','cables','support','socle','dock','casque','headset','volant','jeu','jeux','game','games','gioco','giochi','juego','juegos','boite','grip','grips','joystick','pochette','sacoche','ventilateur','telecommande','remote','camera','facade','plaque','piece','pieces','carte','disque','batterie','accessoire','accessoires','adaptateur','adapter','clavier','souris','keyboard','mouse','hub','cle','convertisseur','station','refroidisseur','cooler','stand','sac','valise','malette']);
+const ACC = new Set(['speicherplatz','portal','festplatte','disco','volante','lenkrad','thrustmaster','metalbox','blister','mannete','manete','manetta','speicherkarte','speicher','storage','expansion','seagate','ssd','memoire','caja','scatola','doos','karton','vacia','vuota','vide','leer','empty','box','emballage','carton','manette','manettes','controller','controllers','mando','mandos','controllo','dualsense','dualshock','coque','housse','funda','etui','case','cover','skin','skins','sticker','stickers','protection','chargeur','charger','cable','cables','support','socle','dock','casque','headset','volant','jeu','jeux','game','games','gioco','giochi','juego','juegos','boite','grip','grips','joystick','pochette','sacoche','ventilateur','telecommande','remote','camera','facade','plaque','piece','pieces','carte','disque','batterie','accessoire','accessoires','adaptateur','adapter','clavier','souris','keyboard','mouse','hub','cle','convertisseur','station','refroidisseur','cooler','stand','sac','valise','malette']);
 const words = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
-const NOT_SALE = new Set(['rechercher','recherchons','rachetons','recherche','recherches','cherche','cherchons','achete','achetons','achat','rachete','rachat','echange','echanges','troc','wanted','busco','cerco','suche','sucht','search','searching','looking','compro','scambio','cambio','tausch','nettoyage','reparation','depannage','location','loue']);
+const NOT_SALE = new Set(['procurando','procuro','busca','buscando','suchen','rechercher','recherchons','rachetons','recherche','recherches','cherche','cherchons','achete','achetons','achat','rachete','rachat','echange','echanges','troc','wanted','busco','cerco','suche','sucht','search','searching','looking','compro','scambio','cambio','tausch','nettoyage','reparation','depannage','location','loue']);
 // Jeux vendus seuls : mot "jeu" n'importe où, ou nom de jeu connu, sans indice de console
 const GAME_WORDS = new Set(['jeu','jeux','game','games','videojuego','videojuegos','videogioco','videogiochi','videogame','videogames','videojeu','videojeux','jogo','juegos','spel','spellen','jogo','jogos','gra','gry','gioco','giochi','juego','juegos','spiel','spiele','cartouche','pegi','steelbook','goty','remastered','remaster','dlc','collectible','collector','figurine','figure','amiibo','artbook','poster','shockbox','funko']);
 const GAME_TITLES = ['dead island','dredge','ultimate edition','deluxe edition','gold edition','game of the year','complete edition','definitive edition','collector','fifa','fc 24','fc 25','fc 26','fc 27','ea sports','gta','grand theft auto','call of duty','black ops','modern warfare','warzone','spider man','spiderman','god of war','gran turismo','hogwarts','elden ring','assassin','ratchet','horizon','last of us','resident evil','mortal kombat','nba 2k','2k25','2k26','minecraft','zelda','mario','pokemon','sonic','crash bandicoot','ghost of tsushima','demon s souls','returnal','f1 2','f1 24','f1 25','battlefield','cyberpunk','red dead','diablo','final fantasy','street fighter','tekken','lego','just dance','sims','need for speed','forza','halo','starfield','astro bot','it takes two','split fiction','dragon ball','naruto','one piece','star wars','avatar','far cry','watch dogs','uncharted','death stranding','stellar blade','wukong','metal gear','silent hill','the crew','tomb raider','batman','hitman','dead space','dying light','sekiro','bloodborne','destiny','overwatch','rocket league','fortnite','valhalla','mirage','shadows','madden','ufc','wwe','pga','nhl','rayman','kingdom hearts','persona','yakuza','like a dragon','monster hunter','devil may cry','alan wake','lies of p','atomic heart','hollow knight','jedi','outlaws'];

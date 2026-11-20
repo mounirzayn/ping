@@ -1,0 +1,15 @@
+name: Veille Ping
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+jobs:
+  veille:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: .github/scripts }
+      - run: python3 .github/scripts/veille.py
+        env:
+          PING_TOPICS: ${{ secrets.PING_TOPICS }}

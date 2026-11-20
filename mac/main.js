@@ -719,7 +719,16 @@ app.whenReady().then(() => {
   scheduleAll();
   listenCmds();
   setTimeout(pushState, 8000);
-  setInterval(pushState, 2 * 3600 * 1000); // signe de vie toutes les 2 h
+  setInterval(pushState, 2 * 3600 * 1000); // état complet toutes les 2 h
+  // Signe de vie toutes les 10 min, envoyé seulement si au moins une recherche a vraiment tourné :
+  // s'il s'arrête, le téléphone passe en mode secours et la veille en ligne prévient d'une coupure.
+  const alive = () => {
+    if (!state.ntfyTopic) return;
+    const recent = state.watches.filter((w) => w.active && w.lastCheck && Date.now() - w.lastCheck < 15 * 60000).length;
+    if (!recent) return;
+    fetch(NTFY + state.ntfyTopic + '-vie', { method: 'POST', body: JSON.stringify({ at: Date.now(), ok: recent }) }).catch(() => {});
+  };
+  setTimeout(alive, 90000); setInterval(alive, 10 * 60000);
   setTimeout(checkUpdate, 15000);
   setInterval(checkUpdate, 3600 * 1000);
 });

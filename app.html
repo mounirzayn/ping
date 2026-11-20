@@ -17,7 +17,7 @@
 html,body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
 body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
 
-.refresh{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:999px;border:0;background:var(--acc);color:#04130a;font-weight:800;font-size:14px;cursor:pointer}.refresh .ico{display:inline-block;font-size:17px}.refresh.spin .ico{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}@media(hover:none){header,nav{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}header{background:#0b0d12}nav{background:#12151d}.hit.fresh{animation:none}}@media(max-width:430px){#syncTxt{display:none}}
+.refresh{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:999px;border:0;background:var(--acc);color:#04130a;font-weight:800;font-size:14px;cursor:pointer}.refresh .ico{display:inline-block;font-size:17px}.refresh.spin .ico{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}#secours{background:#2a1416;border:1px solid #ff5c5c;border-radius:14px;padding:12px;margin:0 0 14px}.sec-t{font-weight:800;color:#ff8080;margin-bottom:4px}.sec-m{font-size:13px;color:var(--mut);margin-bottom:8px}.sec-g{margin-top:8px;font-size:14px}.sec-l{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}.sec-a{padding:7px 11px;border-radius:999px;background:#161a23;border:1px solid var(--line);color:var(--txt);text-decoration:none;font-size:13px;font-weight:600}@media(hover:none){header,nav{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}header{background:#0b0d12}nav{background:#12151d}.hit.fresh{animation:none}}@media(max-width:430px){#syncTxt{display:none}}
 header{position:sticky;top:0;z-index:5;background:rgba(11,13,18,.9);backdrop-filter:blur(12px);padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
 .brand{display:flex;gap:9px;align-items:center;font-weight:800;font-size:20px;letter-spacing:-.4px}.brand img{width:28px;border-radius:7px}
 .sync{font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
@@ -195,6 +195,8 @@ function parseHit(m) {
 const etatParts = {};
 function handle(m, live) {
   if (m.event !== 'message') return;
+  if (m.topic === topic + '-vie') { lastAlive = Math.max(lastAlive, m.time * 1000); renderSync(); return; }
+  if (m.topic === topic && (m.tags || []).includes('ping-coupe')) { lastAlive = Math.min(lastAlive, m.time * 1000 - 1); renderSync(); return; } // alerte de coupure : pas une annonce
   if (m.topic === topic + '-etat') {
     try {
       let s = JSON.parse(m.message);
@@ -204,7 +206,7 @@ function handle(m, live) {
         s = { v: 2, at: s.at, w: [].concat(...Array.from({ length: s.n }, (_, i) => b[i])) };
         Object.keys(etatParts).forEach((t) => { if (+t <= s.at) delete etatParts[t]; });
       }
-      if (!etat || s.at >= etat.at) { etat = s; renderPings(); renderSync(); }
+      if (!etat || s.at >= etat.at) { etat = s; saveLinks(s); renderPings(); renderSync(); }
     } catch {}
     return;
   }
@@ -221,7 +223,7 @@ async function start() {
   if (pushSupported && Notification.permission === 'granted' && store.get('pingPush') === topic) subscribePush(true); // garde l'abonnement à jour
   renderFeed(); renderPings(); renderSync();
   try {
-    const r = await fetch(`${NTFY}${topic},${topic}-etat/json?poll=1&since=12h`);
+    const r = await fetch(`${NTFY}${topic},${topic}-etat,${topic}-vie/json?poll=1&since=12h`);
     const txt = await r.text();
     txt.split('\n').filter(Boolean).forEach((l) => { try { handle(JSON.parse(l), false); } catch {} });
   } catch { toast('Connexion impossible'); }
@@ -231,7 +233,7 @@ async function start() {
 }
 function listen() {
   if (es) es.close();
-  es = new EventSource(`${NTFY}${topic},${topic}-etat/sse`);
+  es = new EventSource(`${NTFY}${topic},${topic}-etat,${topic}-vie/sse`);
   es.onmessage = (e) => { try { handle(JSON.parse(e.data), true); } catch {} };
   es.onerror = () => { renderSync(); };
 }
@@ -245,7 +247,7 @@ async function refresh(manual = false) {
   const btn = $('#refreshBtn'); if (btn) btn.classList.add('spin');
   const before = new Set(hits.map((h) => h.id));
   try {
-    const r = await fetch(`${NTFY}${topic},${topic}-etat/json?poll=1&since=12h`, { cache: 'no-store' });
+    const r = await fetch(`${NTFY}${topic},${topic}-etat,${topic}-vie/json?poll=1&since=12h`, { cache: 'no-store' });
     const txt = await r.text();
     txt.split('\n').filter(Boolean).forEach((l) => { try { handle(JSON.parse(l), false); } catch {} });
     const added = hits.filter((h) => !before.has(h.id));
@@ -279,12 +281,37 @@ async function send(cmd, p) {
 }
 
 // ---------- Affichage ----------
+// ---------- Mode secours ----------
+// L'ordinateur envoie un signe de vie toutes les 10 min. Plus rien depuis 30 min = il ne surveille plus :
+// on affiche un bandeau avec tes recherches en liens directs (déjà triées par « plus récentes »).
+let lastAlive = 0;
+const linksGet = () => { try { return JSON.parse(store.get('pingLinks') || '{}'); } catch { return {}; } };
+function saveLinks(s) {
+  const prev = linksGet();
+  const links = {};
+  for (const w of s.w || []) { if (!w.a) continue; const u = w.u || (prev[w.id] && prev[w.id].u); if (u) links[w.id] = { n: w.n, s: w.s, u }; }
+  if (Object.keys(links).length) store.set('pingLinks', JSON.stringify(links));
+}
+const aliveAt = () => Math.max(lastAlive, etat ? etat.at : 0);
+const isDown = () => { const a = aliveAt(); return a > 0 && Date.now() - a > 30 * 60000; };
+function renderSecours() {
+  let el = $('#secours');
+  if (!isDown()) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'secours'; $('#v-feed').insertBefore(el, $('#v-feed').firstChild); }
+  const links = Object.values(linksGet());
+  const groups = {};
+  for (const l of links) (groups[l.n] = groups[l.n] || []).push(l);
+  el.innerHTML = `<div class="sec-t">⚠️ Ton ordinateur ne surveille plus depuis ${ago(aliveAt()).replace('il y a ', '')}</div>
+    <div class="sec-m">Rallume-le ou ouvre Ping dessus. En attendant, ouvre tes recherches ici : elles sont déjà triées par les plus récentes.</div>
+    ${Object.entries(groups).map(([n, ls]) => `<div class="sec-g"><b>${esc(n)}</b><div class="sec-l">${ls.map((l) => `<a class="sec-a" href="${esc(l.u)}" target="_blank" rel="noopener">${esc((SITE_NAMES && SITE_NAMES[l.s]) || l.s)} ↗</a>`).join('')}</div></div>`).join('') || '<div class="sec-m">Tes recherches apparaîtront ici dès que l’ordinateur aura été connecté une fois.</div>'}`;
+}
 function renderSync() {
   const dot = $('#syncDot'), txt = $('#syncTxt');
-  if (!etat) { dot.className = 'dot'; txt.textContent = 'En attente du Mac'; return; }
-  const old = Date.now() - etat.at > 3 * 3600 * 1000;
-  dot.className = 'dot ' + (old ? 'off' : 'on');
-  txt.textContent = (old ? 'Mac hors ligne ? ' : 'Mac connecté · ') + ago(etat.at);
+  renderSecours();
+  if (!etat && !lastAlive) { dot.className = 'dot'; txt.textContent = 'En attente de l’ordinateur'; return; }
+  const down = isDown();
+  dot.className = 'dot ' + (down ? 'off' : 'on');
+  txt.textContent = (down ? 'Ordinateur coupé · ' : 'Ordinateur actif · ') + ago(aliveAt());
 }
 function coteBadge(price, cote) {
   if (!cote || price == null) return '';

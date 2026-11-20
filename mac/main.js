@@ -405,7 +405,7 @@ async function check(id, manual = false) {
   // au-delà du budget du jour, une alerte groupée seulement (le quota ntfy est limité)
   const budget = state.ntfyToken ? 1500 : DAILY_ALERT_BUDGET; // abonnement : 2 500 messages/jour, on garde de la marge pour l'état
   const overBudget = state.alertDay === today() && (state.alertCount || 0) >= budget;
-  const solo = overBudget ? [] : stamped.slice(0, 2);
+  const solo = overBudget ? [] : stamped.slice(0, state.ntfyToken ? MAX_NOTIF_PER_CYCLE : 2); // abonnement : jusqu'à 6 alertes détaillées par passage
   solo.forEach((h) => notify({
     title: `🔔 ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.name}`,
     message: `${h.title}\n${h.site}${coteLine(h.price, h.cote)}`,

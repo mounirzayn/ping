@@ -77,7 +77,7 @@ function save() {
   broadcast();
   maybePushState();
 }
-const publicState = () => ({ ...state, ntfyBlocked: ntfyBlocked(), siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
+const publicState = () => ({ ...state, ntfyToken: undefined, hasNtfyToken: !!state.ntfyToken, ntfyBlocked: ntfyBlocked(), siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
 function broadcast() {
   BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('state', publicState()); });
   updateBadge();
@@ -513,14 +513,15 @@ function ntfyPost(url, body, isAlert = false) {
     if (state.alertDay !== today()) { state.alertDay = today(); state.alertCount = 0; }
     state.alertCount = (state.alertCount || 0) + 1;
   }
-  return fetch(url, { method: 'POST', body }).then((r) => {
+  const headers = state.ntfyToken ? { Authorization: 'Bearer ' + state.ntfyToken } : {}; // abonnement ntfy : les messages comptent sur le compte, plus sur la connexion
+  return fetch(url, { method: 'POST', body, headers }).then((r) => {
     if (r.status === 429) {
       ntfyBlockedUntil = Date.now() + 30 * 60000; if (isAlert) missedWhileBlocked++;
       broadcast(); return false;
     }
     if (missedWhileBlocked && r.ok) {
       const n = missedWhileBlocked; missedWhileBlocked = 0;
-      fetch(NTFY, { method: 'POST', body: JSON.stringify({ topic: state.ntfyTopic, title: `🔔 ${n} annonce(s) pendant la pause`, message: 'L’envoi vers le téléphone était en pause (limite du jour atteinte). Ouvre Ping pour les voir.', priority: 4, tags: ['bell'] }) }).catch(() => {});
+      fetch(NTFY, { method: 'POST', headers, body: JSON.stringify({ topic: state.ntfyTopic, title: `🔔 ${n} annonce(s) pendant la pause`, message: 'L’envoi vers le téléphone était en pause (limite du jour atteinte). Ouvre Ping pour les voir.', priority: 4, tags: ['bell'] }) }).catch(() => {});
     }
     return r.ok;
   }).catch(() => false);
@@ -615,6 +616,7 @@ function doAction(type, p, fromWeb = false) {
     case 'setTopic': if (!fromWeb) { state.ntfyTopic = p; save(); listenCmds(); pushState(); } break;
     case 'setDesktop': if (!fromWeb) { state.desktopNotif = !!p; save(); } break;
     case 'setSound': if (!fromWeb) { state.soundOn = !!p; save(); } break;
+    case 'setNtfyToken': if (!fromWeb) { state.ntfyToken = String(p || '').trim().slice(0, 80); ntfyBlockedUntil = 0; save(); pushState(); } break;
     case 'openBrowser': if (!fromWeb) openBrowser(p); break;
     case 'openExternal': if (!fromWeb && /^https:\/\//.test(p)) shell.openExternal(p); break;
   }

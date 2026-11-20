@@ -173,6 +173,12 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
         <div class="row2"><input id="topicEdit" style="flex:1"><button id="btnTopic">Enregistrer</button></div>
       </div>
       <div class="card">
+        <h2>🚀 Abonnement ntfy (facultatif)</h2>
+        <p>La version gratuite de ntfy limite le nombre d'alertes par jour. Avec un abonnement, colle ici ta clé d'accès (elle commence par <b>tk_</b>) : les alertes ne seront plus bloquées.</p>
+        <div class="row2"><input id="ntfyToken" type="password" placeholder="tk_…" style="flex:1" autocomplete="off"><button id="btnToken">Enregistrer</button></div>
+        <p id="tokenState" style="margin-top:8px"></p>
+      </div>
+      <div class="card">
         <h2>🔓 Connexions aux sites</h2>
         <p>Ping utilise son propre navigateur. Connecte-toi une fois, il s'en souvient.</p>
         <div class="row2">

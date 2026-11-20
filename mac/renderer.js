@@ -207,6 +207,7 @@ function render(s) {
   $('#btnPause').textContent = active.length ? 'Tout mettre en pause' : 'Tout reprendre';
   $('#topic').textContent = S.ntfyTopic;
   if (document.activeElement !== $('#topicEdit')) $('#topicEdit').value = S.ntfyTopic;
+  $('#tokenState').textContent = S.hasNtfyToken ? '✅ Abonnement actif : clé enregistrée. Laisse le champ vide et clique sur Enregistrer pour la retirer.' : 'Aucune clé : version gratuite.';
   $('#desktopNotif').checked = S.desktopNotif !== false;
   $('#soundOn').checked = S.soundOn !== false;
   $('#ver').textContent = S.version || '';
@@ -239,6 +240,11 @@ $('#btnTopic').onclick = () => {
   const v = $('#topicEdit').value.trim().replace(/[^a-zA-Z0-9_-]/g, '');
   if (v.length < 6) return toast('6 caractères minimum');
   act('setTopic', v); toast('Code enregistré');
+};
+$('#btnToken').onclick = () => {
+  const v = $('#ntfyToken').value.trim();
+  if (v && !/^tk_[A-Za-z0-9]{10,}$/.test(v)) return toast('La clé doit commencer par tk_');
+  act('setNtfyToken', v); $('#ntfyToken').value = ''; toast(v ? 'Clé enregistrée' : 'Clé retirée');
 };
 document.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => act('openBrowser', b.dataset.open)));
 

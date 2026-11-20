@@ -201,6 +201,7 @@ function render(s) {
   if (!S.watches.length) { dot.className = 'dot'; txt.textContent = 'Aucune recherche'; }
   else if (!active.length) { dot.className = 'dot'; txt.textContent = 'En pause'; }
   else if (blocked) { dot.className = 'dot blocked'; txt.textContent = `${blocked} site(s) demandent une vérification`; }
+  else if (S.ntfyBlocked) { dot.className = 'dot blocked'; txt.textContent = 'Surveillance active · envoi au téléphone en pause (limite du jour)'; }
   else { dot.className = 'dot ok'; txt.textContent = `Surveillance active · ${active.length} site(s)`; }
   const ub = $('#unreadBadge'); ub.hidden = !S.unread; ub.textContent = S.unread;
   $('#btnPause').textContent = active.length ? 'Tout mettre en pause' : 'Tout reprendre';

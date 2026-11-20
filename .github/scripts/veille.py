@@ -1,11 +1,11 @@
-"""Veille Ping : toutes les 10 min, vérifie que chaque ordinateur envoie son signe de vie.
-Plus rien depuis 30 min = la surveillance est coupée : on prévient le téléphone (une seule fois par coupure)."""
+"""Veille Ping : toutes les 10 min, vérifie que chaque ordinateur envoie son état (toutes les 30 min).
+Plus rien depuis 50 min = la surveillance est coupée : on prévient le téléphone (une seule fois par coupure)."""
 import json, os, time, urllib.request, urllib.parse
 from datetime import datetime, timezone, timedelta
 
 NTFY = 'https://ntfy.sh/'
 APP = 'https://mounirzayn.github.io/ping/app.html'
-LIMIT = 30 * 60
+LIMIT = 50 * 60
 
 def poll(topic, since, extra=''):
     url = f"{NTFY}{urllib.parse.quote(topic)}/json?poll=1&since={since}{extra}"
@@ -24,7 +24,7 @@ topics = [t.strip() for t in os.environ.get('PING_TOPICS', '').replace('\n', ','
 now = time.time()
 for t in topics:
     try:
-        vie = [m for m in poll(t + '-vie', '24h') if m.get('event') == 'message']
+        vie = [m for m in poll(t + '-etat', '24h') if m.get('event') == 'message']
         if not vie:
             print(t[:10], 'aucun signe de vie sur 24 h : ignoré'); continue
         last = max(m['time'] for m in vie)

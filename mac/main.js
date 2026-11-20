@@ -77,7 +77,7 @@ function save() {
   broadcast();
   maybePushState();
 }
-const publicState = () => ({ ...state, siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
+const publicState = () => ({ ...state, ntfyBlocked: ntfyBlocked(), siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
 function broadcast() {
   BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('state', publicState()); });
   updateBadge();
@@ -401,11 +401,21 @@ async function check(id, manual = false) {
   state.unread += stamped.length;
   save();
 
-  stamped.slice(0, MAX_NOTIF_PER_CYCLE).forEach((h) => notify({
+  // 2 alertes détaillées max par passage, le reste en une seule alerte groupée ;
+  // au-delà du budget du jour, une alerte groupée seulement (le quota ntfy est limité)
+  const overBudget = state.alertDay === today() && (state.alertCount || 0) >= DAILY_ALERT_BUDGET;
+  const solo = overBudget ? [] : stamped.slice(0, 2);
+  solo.forEach((h) => notify({
     title: `🔔 ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.name}`,
     message: `${h.title}\n${h.site}${coteLine(h.price, h.cote)}`,
     url: h.url, img: h.img,
   }));
+  const rest = stamped.slice(solo.length);
+  if (rest.length) notify({
+    title: `🔔 ${rest.length} autre(s) annonce(s) · ${w.name}`,
+    message: rest.slice(0, 4).map((h) => `${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : '?'} · ${h.title}`).join('\n'),
+    url: rest[0].url, img: rest[0].img,
+  });
   if (w.active) scheduleNext(w);
 }
 
@@ -491,6 +501,32 @@ function coteLine(price, cote) {
   return `\nCote ~${cote.toLocaleString('fr-FR')} € · ${d > 0 ? '+' : ''}${d} %`;
 }
 
+// ---------- Envoi vers le téléphone (ntfy) ----------
+// ntfy.sh gratuit limite le nombre de messages par jour et par connexion. Ping économise :
+// alertes regroupées, état envoyé seulement s'il change ou toutes les 30 min, et pause propre si la limite est atteinte.
+const DAILY_ALERT_BUDGET = 120;
+let ntfyBlockedUntil = 0, missedWhileBlocked = 0;
+const today = () => new Date().toISOString().slice(0, 10);
+function ntfyPost(url, body, isAlert = false) {
+  if (Date.now() < ntfyBlockedUntil) { if (isAlert) missedWhileBlocked++; return Promise.resolve(false); }
+  if (isAlert) {
+    if (state.alertDay !== today()) { state.alertDay = today(); state.alertCount = 0; }
+    state.alertCount = (state.alertCount || 0) + 1;
+  }
+  return fetch(url, { method: 'POST', body }).then((r) => {
+    if (r.status === 429) {
+      ntfyBlockedUntil = Date.now() + 30 * 60000; if (isAlert) missedWhileBlocked++;
+      broadcast(); return false;
+    }
+    if (missedWhileBlocked && r.ok) {
+      const n = missedWhileBlocked; missedWhileBlocked = 0;
+      fetch(NTFY, { method: 'POST', body: JSON.stringify({ topic: state.ntfyTopic, title: `🔔 ${n} annonce(s) pendant la pause`, message: 'L’envoi vers le téléphone était en pause (limite du jour atteinte). Ouvre Ping pour les voir.', priority: 4, tags: ['bell'] }) }).catch(() => {});
+    }
+    return r.ok;
+  }).catch(() => false);
+}
+const ntfyBlocked = () => Date.now() < ntfyBlockedUntil;
+
 // ---------- Notifications : Mac + téléphone (ntfy) ----------
 function notify({ title, message, url, img, inApp }) {
   if (state.desktopNotif !== false && Notification.isSupported()) {
@@ -501,7 +537,7 @@ function notify({ title, message, url, img, inApp }) {
   if (state.ntfyTopic) {
     const body = { topic: state.ntfyTopic, title, message, click: url, priority: 5, tags: ['bell'] };
     if (img) body.attach = img;
-    fetch(NTFY, { method: 'POST', body: JSON.stringify(body) }).catch(() => {});
+    ntfyPost(NTFY, JSON.stringify(body), true);
   }
 }
 
@@ -654,17 +690,23 @@ function compactState(withUrl = true) {
 }
 function maybePushState() {
   // n'envoie que sur un vrai changement (économise le quota ntfy)
-  const sig = JSON.stringify(state.watches.map((w) => [w.id, w.name, w.active, w.status, w.count, w.min, w.max, w.interval, w.cote && w.cote.at]));
+  const sig = JSON.stringify(state.watches.map((w) => [w.id, w.name, w.active, w.min, w.max, w.interval, w.site, w.status === 'blocked']));
   if (sig === lastSig) return;
-  lastSig = sig;
+  lastSig = sig; needUrls = true;
   clearTimeout(stateTimer);
   stateTimer = setTimeout(pushState, 4000);
 }
+let lastPush = 0, needUrls = true, lastUrlPush = 0;
 function pushState() {
   if (!state.ntfyTopic) return;
+  if (Date.now() - lastPush < 60000) { clearTimeout(stateTimer); stateTimer = setTimeout(pushState, 60000); return; } // 1 envoi par minute max
+  lastPush = Date.now();
   // ntfy limite un message à 4 Ko : au-delà il devient une pièce jointe illisible pour le téléphone.
   // Avec beaucoup de recherches on découpe donc l'état en plusieurs messages (le site les réassemble).
-  const full = compactState(), MAX = 3800;
+  // les liens des recherches ne partent que si quelque chose a changé (ou toutes les 6 h) : un seul petit message le reste du temps
+  const withUrls = needUrls || Date.now() - lastUrlPush > 6 * 3600000;
+  if (withUrls) { needUrls = false; lastUrlPush = Date.now(); }
+  const full = compactState(withUrls), MAX = 3800;
   const parts = []; let cur = [];
   const size = (w) => JSON.stringify({ v: 2, at: full.at, k: 99, n: 99, w }).length;
   for (const w of full.w) {
@@ -675,7 +717,7 @@ function pushState() {
     cur.push(w);
   }
   parts.push(cur);
-  parts.forEach((w, k) => fetch(NTFY + state.ntfyTopic + '-etat', { method: 'POST', body: JSON.stringify({ v: 2, at: full.at, k, n: parts.length, w }) }).catch(() => {}));
+  parts.forEach((w, k) => ntfyPost(NTFY + state.ntfyTopic + '-etat', JSON.stringify({ v: 2, at: full.at, k, n: parts.length, w })));
 }
 async function listenCmds() {
   if (cmdAbort) cmdAbort.abort();
@@ -736,16 +778,8 @@ app.whenReady().then(() => {
   listenCmds();
   cleanOldHits(); setInterval(cleanOldHits, 5 * 60000);
   setTimeout(pushState, 8000);
-  setInterval(pushState, 2 * 3600 * 1000); // état complet toutes les 2 h
-  // Signe de vie toutes les 10 min, envoyé seulement si au moins une recherche a vraiment tourné :
-  // s'il s'arrête, le téléphone passe en mode secours et la veille en ligne prévient d'une coupure.
-  const alive = () => {
-    if (!state.ntfyTopic) return;
-    const recent = state.watches.filter((w) => w.active && w.lastCheck && Date.now() - w.lastCheck < 15 * 60000).length;
-    if (!recent) return;
-    fetch(NTFY + state.ntfyTopic + '-vie', { method: 'POST', body: JSON.stringify({ at: Date.now(), ok: recent }) }).catch(() => {});
-  };
-  setTimeout(alive, 90000); setInterval(alive, 10 * 60000);
+  setInterval(pushState, 30 * 60000); // état toutes les 30 min = signe de vie pour le téléphone
+
   setTimeout(checkUpdate, 15000);
   setInterval(checkUpdate, 3600 * 1000);
 });

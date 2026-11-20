@@ -288,7 +288,7 @@ async function send(cmd, p) {
 
 // ---------- Affichage ----------
 // ---------- Mode secours ----------
-// L'ordinateur envoie un signe de vie toutes les 10 min. Plus rien depuis 30 min = il ne surveille plus :
+// L'ordinateur envoie son état toutes les 30 min. Plus rien depuis 45 min = il ne surveille plus :
 // on affiche un bandeau avec tes recherches en liens directs (déjà triées par « plus récentes »).
 let lastAlive = 0;
 const linksGet = () => { try { return JSON.parse(store.get('pingLinks') || '{}'); } catch { return {}; } };
@@ -299,7 +299,7 @@ function saveLinks(s) {
   if (Object.keys(links).length) store.set('pingLinks', JSON.stringify(links));
 }
 const aliveAt = () => Math.max(lastAlive, etat ? etat.at : 0);
-const isDown = () => { const a = aliveAt(); return a > 0 && Date.now() - a > 30 * 60000; };
+const isDown = () => { const a = aliveAt(); return a > 0 && Date.now() - a > 45 * 60000; }; // l'ordinateur envoie son état toutes les 30 min
 function renderSecours() {
   let el = $('#secours');
   if (!isDown()) { if (el) el.remove(); return; }

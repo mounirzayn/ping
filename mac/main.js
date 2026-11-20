@@ -40,17 +40,22 @@ function load() {
     state.v3 = true;
   }
   if (!state.v4) { // nettoie le flux avec le nouveau filtre (jeux vendus seuls)
-    state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, coteForWatch(w))); });
+    state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, h.cote ? { med: h.cote } : null)); });
     state.unread = Math.min(state.unread, state.hits.length);
     state.v4 = true;
   }
   if (!state.v5) { // filtre « uniquement l'objet » sur toutes les recherches de consoles / téléphones / ordis, puis nettoyage
     state.watches.forEach((w) => { if (['consoles', 'telephones', 'informatique'].includes(w.cat)) w.strict = true; });
-    state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, coteForWatch(w))); });
+    state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, h.cote ? { med: h.cote } : null)); });
     state.unread = Math.min(state.unread, state.hits.length);
     state.v5 = true;
   }
   if (!state.v6) { state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || matches(w, h); }); state.unread = Math.min(state.unread, state.hits.length); state.v6 = true; }
+  if (!state.v8) { // nouvelle cote annonce par annonce : on repart d'un relevé neuf
+    state.watches.forEach((w) => { if (w.cote && !w.cote.items) w.cote = null; });
+    state.hits.forEach((h) => { h.cote = null; });
+    state.v8 = true;
+  }
   if (!state.v7) { // Marketplace : recherches fixées sur Paris (et pas la position du compte Facebook)
     state.watches.forEach((w) => {
       if (w.site !== 'fb' || /\/marketplace\/[a-z-]+\/(search|vehicles|property)/.test(w.url)) return;
@@ -60,7 +65,7 @@ function load() {
     state.v7 = true;
   }
   // À chaque démarrage : on repasse le flux au filtre actuel (les règles s'améliorent à chaque version)
-  state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, coteForWatch(w))); });
+  state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, h.cote ? { med: h.cote } : null)); });
   state.unread = Math.min(state.unread, state.hits.length);
   if (!state.ntfyTopic) state.ntfyTopic = 'ping-' + crypto.randomBytes(9).toString('hex');
   save();
@@ -243,26 +248,57 @@ function getWorker(id) {
 // qui passent les mêmes filtres (mots-clés, objet seul). La médiane de ces prix = la cote.
 const COTE_EVERY = 6 * 3600 * 1000;
 const median = (a) => { const b = [...a].sort((x, y) => x - y); const m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
-function coteOf(prices) {
+function coteOf(prices, minN = 6) {
   let p = prices.filter((x) => x > 1);
-  if (p.length < 6) return null;
+  if (p.length < minN) return null;
   const m0 = median(p);
   p = p.filter((x) => x >= m0 * 0.35 && x <= m0 * 2.5); // jeux à 10 € ou lots à 2 000 € : hors cote
-  if (p.length < 6) return null;
+  if (p.length < minN) return null;
   return { med: Math.round(median(p)), n: p.length };
 }
-function groupCotes() {
-  const by = {};
-  for (const w of state.watches) {
-    if (!w.cote || !w.cote.p) continue;
-    const g = w.group || w.id; (by[g] = by[g] || { p: [], at: 0 });
-    by[g].p.push(...w.cote.p); by[g].at = Math.max(by[g].at, w.cote.at);
-  }
+// Échantillon d'annonces (titre + prix) relevé sans filtre de prix, par groupe de recherche
+function groupSample(g) {
+  const out = [];
+  for (const w of state.watches) if ((w.group || w.id) === g && w.cote && w.cote.items) out.push(...w.cote.items);
+  return out;
+}
+function groupCotes() { // prix médian de toute la recherche (indicatif, affiché dans « Mes recherches »)
   const out = {};
-  for (const [g, v] of Object.entries(by)) { const c = coteOf(v.p); if (c) out[g] = { ...c, at: v.at }; }
+  const groups = new Set(state.watches.map((w) => w.group || w.id));
+  for (const g of groups) { const c = coteOf(groupSample(g).map((x) => x.p)); if (c) out[g] = c; }
   return out;
 }
 const coteForWatch = (w) => groupCotes()[w.group || w.id] || null;
+
+// Cote d'UNE annonce : on la compare seulement aux annonces qui lui ressemblent vraiment
+// (même marque, même modèle, mêmes chiffres), pondérées par la rareté des mots.
+// Pas assez d'annonces semblables, ou titre trop vague (« ordinateur portable ») = pas de cote,
+// plutôt qu'une cote fausse.
+const COTE_STOP = new Set(('a au aux avec de des du en et la le les l d un une pour par sur sans ou tres tres bon bonne etat parfait ' +
+  'neuf neuve comme vend vends vente urgent occasion prix ferme negociable lot dispo disponible tbe be jamais servi peu marche fonctionne ' +
+  'nouveau nouvelle original origine garantie facture boite carton complet complete super top etc tout toute plus mois an ans').split(' '));
+const tokens = (t) => [...new Set(String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .split(/[^a-z0-9]+/).filter((x) => x.length >= 2 && !COTE_STOP.has(x)))];
+function coteForItem(w, title) {
+  const sample = groupSample(w.group || w.id).filter((x) => x.p > 1);
+  if (sample.length < 8) return null;
+  const toks = sample.map((x) => new Set(tokens(x.t)));
+  const df = new Map(); toks.forEach((set) => set.forEach((k) => df.set(k, (df.get(k) || 0) + 1)));
+  const N = sample.length;
+  const idf = (k) => Math.min(1.5, Math.log((N + 1) / ((df.get(k) || 0) + 1))) + (/\d/.test(k) ? 0.3 : 0); // un mot rare compte, sans tout écraser
+  const T = tokens(title).filter((k) => df.has(k)); // un mot jamais vu ailleurs ne peut pas servir de comparaison
+  const distinctive = T.filter((k) => (df.get(k) || 0) <= N * 0.5);
+  if (!distinctive.length) return null; // titre trop vague pour être comparé
+  const total = T.reduce((a, k) => a + idf(k), 0);
+  const scored = [];
+  toks.forEach((set, i) => {
+    let sc = 0; for (const k of T) if (set.has(k)) sc += idf(k);
+    if (total > 0 && sc / total >= 0.5 && distinctive.some((k) => set.has(k))) scored.push([sc, sample[i].p]);
+  });
+  scored.sort((a, b) => b[0] - a[0]);
+  const c = coteOf(scored.slice(0, 20).map((x) => x[1]), 4);
+  return c;
+}
 // Mode objet seul : bien en dessous de la cote = presque toujours un accessoire, une pièce ou une arnaque
 const belowCote = (w, it, c) => !!(w.strict && c && it.price != null && it.price < c.med * 0.4);
 async function checkCote(id) {
@@ -284,8 +320,12 @@ async function checkCote(id) {
   const bw = workers.get(key); if (bw && !bw.isDestroyed()) bw.destroy(); workers.delete(key);
   const w = state.watches.find((x) => x.id === id); if (!w) return;
   const free = { ...w, min: '', max: '' };
-  const prices = items.filter((it) => it.price != null && matches(free, it)).map((it) => it.price);
-  w.cote = { p: prices.slice(0, 80), at: Date.now() };
+  const fresh = items.filter((it) => it.price != null && matches(free, it)).map((it) => ({ t: String(it.title).slice(0, 90), p: it.price }));
+  // on cumule les relevés successifs (jusqu'à 300 annonces) pour une cote de plus en plus juste
+  const prev = (w.cote && w.cote.items) || [];
+  const seenK = new Set(); const all = [];
+  for (const x of [...fresh, ...prev]) { const k = x.t + '|' + x.p; if (!seenK.has(k)) { seenK.add(k); all.push(x); } }
+  w.cote = { items: all.slice(0, 300), at: Date.now() };
   save();
 }
 
@@ -337,13 +377,11 @@ async function check(id, manual = false) {
   const fresh = result.items.filter((it) => !seen.has(it.id));
   result.items.forEach((it) => seen.add(it.id));
   w.seen = [...seen].slice(-MAX_SEEN);
-  const cote0 = coteForWatch(w);
-  const hits = w.primed ? fresh.filter((it) => matches(w, it) && !belowCote(w, it, cote0)) : [];
+  const hits = w.primed ? fresh.filter((it) => matches(w, it) && !belowCote(w, it, coteForItem(w, it.title))) : [];
   w.primed = true; // premier passage : mémorise l'existant sans notifier
   w.count = (w.count || 0) + hits.length;
 
-  const cote = coteForWatch(w);
-  const stamped = hits.map((h) => ({ ...h, watchId: w.id, watchName: w.name, cat: w.cat, at: Date.now(), cote: cote ? cote.med : null }));
+  const stamped = hits.map((h) => { const c = coteForItem(w, h.title); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, at: Date.now(), cote: c ? c.med : null, coteN: c ? c.n : 0 }; });
   state.hits = [...stamped, ...state.hits].slice(0, MAX_HITS);
   state.unread += stamped.length;
   save();

@@ -79,6 +79,7 @@ code{background:#0b0d12;border:1px solid var(--line);padding:3px 8px;border-radi
 .toast.on{opacity:1;transform:translateX(-50%)}
 details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
 @media(max-width:900px){.cards,.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+.usage{margin-top:12px}.usage-l{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}.usage-bar{height:8px;border-radius:99px;background:#1f2430;overflow:hidden}#usageFill{height:100%;width:0;background:var(--acc);transition:width .4s}#usageFill.warn{background:#ffb02e}#usageFill.full{background:#ff5c5c}
 </style>
 </head>
 <body>
@@ -180,6 +181,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
         <p style="margin-top:10px">Ou colle une clé déjà créée :</p>
         <div class="row2"><input id="ntfyToken" type="password" placeholder="tk_…" style="flex:1" autocomplete="off"><button id="btnToken">Enregistrer</button></div>
         <p id="tokenState" style="margin-top:8px"></p>
+        <div class="usage"><div class="usage-l"><span>Messages envoyés aujourd'hui</span><b id="usageTxt">–</b></div><div class="usage-bar"><div id="usageFill"></div></div><p id="usageSrc" style="margin-top:6px;font-size:12px"></p></div>
       </div>
       <div class="card">
         <h2>🔓 Connexions aux sites</h2>

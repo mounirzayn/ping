@@ -207,6 +207,12 @@ function render(s) {
   $('#btnPause').textContent = active.length ? 'Tout mettre en pause' : 'Tout reprendre';
   $('#topic').textContent = S.ntfyTopic;
   if (document.activeElement !== $('#topicEdit')) $('#topicEdit').value = S.ntfyTopic;
+  if (S.usage) {
+    const { used, limit, src } = S.usage; const pc = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+    $('#usageTxt').textContent = `${used.toLocaleString('fr-FR')} / ${limit.toLocaleString('fr-FR')} (${pc} %)`;
+    const f = $('#usageFill'); f.style.width = pc + '%'; f.className = pc >= 100 ? 'full' : pc >= 80 ? 'warn' : '';
+    $('#usageSrc').textContent = src === 'ntfy' ? 'Compteur officiel de ton compte ntfy, remis à zéro chaque jour.' : 'Compté par Ping depuis minuit (la version gratuite compte tout ce qui part de ta connexion internet).';
+  }
   $('#tokenState').textContent = S.hasNtfyToken ? '✅ Abonnement actif : clé enregistrée. Laisse le champ vide et clique sur Enregistrer pour la retirer.' : 'Aucune clé : version gratuite.';
   $('#desktopNotif').checked = S.desktopNotif !== false;
   $('#soundOn').checked = S.soundOn !== false;

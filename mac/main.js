@@ -77,7 +77,7 @@ function save() {
   broadcast();
   maybePushState();
 }
-const publicState = () => ({ ...state, ntfyToken: undefined, hasNtfyToken: !!state.ntfyToken, ntfyBlocked: ntfyBlocked(), siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
+const publicState = () => ({ ...state, ntfyToken: undefined, hasNtfyToken: !!state.ntfyToken, usage: usageNow(), ntfyBlocked: ntfyBlocked(), siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
 function broadcast() {
   BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('state', publicState()); });
   updateBadge();
@@ -507,12 +507,34 @@ function coteLine(price, cote) {
 const DAILY_ALERT_BUDGET = 120;
 let ntfyBlockedUntil = 0, missedWhileBlocked = 0;
 const today = () => new Date().toISOString().slice(0, 10);
+// Compteur : messages envoyés aujourd'hui (compté par Ping) et, avec un compte ntfy, le compteur officiel
+function countSent() {
+  if (state.sentDay !== today()) { state.sentDay = today(); state.sentCount = 0; }
+  state.sentCount = (state.sentCount || 0) + 1;
+}
+let usageTimer = null;
+async function refreshUsage() {
+  if (!state.ntfyToken) { state.ntfyUsage = null; return; }
+  try {
+    const r = await fetch('https://ntfy.sh/v1/account', { headers: { Authorization: 'Bearer ' + state.ntfyToken } });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j && j.stats && j.limits) {
+      state.ntfyUsage = { used: j.stats.messages || 0, limit: j.limits.messages || 0, plan: (j.tier && j.tier.name) || '', at: Date.now() };
+      broadcast();
+    }
+  } catch {}
+}
+const usageNow = () => state.ntfyUsage && Date.now() - state.ntfyUsage.at < 3600000
+  ? { used: state.ntfyUsage.used, limit: state.ntfyUsage.limit, src: 'ntfy' }
+  : { used: state.sentDay === today() ? state.sentCount || 0 : 0, limit: state.ntfyToken ? 2500 : 250, src: 'ping' };
 function ntfyPost(url, body, isAlert = false) {
   if (Date.now() < ntfyBlockedUntil) { if (isAlert) missedWhileBlocked++; return Promise.resolve(false); }
   if (isAlert) {
     if (state.alertDay !== today()) { state.alertDay = today(); state.alertCount = 0; }
     state.alertCount = (state.alertCount || 0) + 1;
   }
+  countSent();
   const headers = state.ntfyToken ? { Authorization: 'Bearer ' + state.ntfyToken } : {}; // abonnement ntfy : les messages comptent sur le compte, plus sur la connexion
   return fetch(url, { method: 'POST', body, headers }).then((r) => {
     if (r.status === 429) {
@@ -626,7 +648,7 @@ async function doAction(type, p, fromWeb = false) {
         if (r.status === 401) return { ok: false, err: 'Identifiant ou mot de passe incorrect' };
         const j = await r.json().catch(() => ({}));
         if (!r.ok || !j.token) return { ok: false, err: 'ntfy a refusé (' + r.status + ')' };
-        state.ntfyToken = j.token; ntfyBlockedUntil = 0; save(); pushState();
+        state.ntfyToken = j.token; ntfyBlockedUntil = 0; save(); pushState(); refreshUsage();
         return { ok: true };
       } catch { return { ok: false, err: 'Pas de connexion à ntfy' }; }
     }
@@ -699,7 +721,8 @@ async function installUpdate() {
 // Le Mac publie un résumé de ses pings sur <canal>-etat et écoute les commandes sur <canal>-cmd.
 let lastSig = '', stateTimer = null, cmdAbort = null;
 function compactState(withUrl = true) {
-  return { v: 1, at: Date.now(), w: state.watches.map((w) => ({
+  const u = usageNow();
+  return { v: 1, at: Date.now(), nu: [u.used, u.limit], w: state.watches.map((w) => ({
     id: w.id, n: w.name, s: w.site, c: w.cat, mi: w.min, ma: w.max, i: w.interval, a: w.active ? 1 : 0,
     st: w.status, ct: w.count || 0, lc: w.lastCheck || 0, co: (coteForWatch(w) || {}).med || 0, ...(withUrl ? { u: w.url } : {}),
   })) };
@@ -793,6 +816,7 @@ app.whenReady().then(() => {
   scheduleAll();
   listenCmds();
   cleanOldHits(); setInterval(cleanOldHits, 5 * 60000);
+  setTimeout(refreshUsage, 5000); setInterval(refreshUsage, 10 * 60000);
   setTimeout(pushState, 8000);
   setInterval(pushState, 30 * 60000); // état toutes les 30 min = signe de vie pour le téléphone
 

@@ -243,6 +243,21 @@ function getWorker(id) {
   return bw;
 }
 
+// ---------- Nettoyage automatique ----------
+// Une annonce s'efface toute seule au bout d'1 h, sauf si elle est en favori (étoile).
+const HIT_TTL = 60 * 60000;
+function keepFavs(list) {
+  const out = []; let n = 0;
+  for (const h of list) { if (h.fav) out.push(h); else if (n < MAX_HITS) { out.push(h); n++; } }
+  return out;
+}
+function cleanOldHits() {
+  const before = state.hits.length; const now = Date.now();
+  const kept = [];
+  state.hits.forEach((h, i) => { if (h.fav || now - (h.at || 0) < HIT_TTL) kept.push(h); else if (i < state.unread) state.unread--; });
+  if (kept.length !== before) { state.hits = kept; state.unread = Math.max(0, Math.min(state.unread, kept.length)); save(); }
+}
+
 // ---------- Cote du marché ----------
 // Toutes les 6 h, chaque recherche relit sa page SANS filtre de prix et garde le prix des objets
 // qui passent les mêmes filtres (mots-clés, objet seul). La médiane de ces prix = la cote.
@@ -382,7 +397,7 @@ async function check(id, manual = false) {
   w.count = (w.count || 0) + hits.length;
 
   const stamped = hits.map((h) => { const c = coteForItem(w, h.title); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, at: Date.now(), cote: c ? c.med : null, coteN: c ? c.n : 0 }; });
-  state.hits = [...stamped, ...state.hits].slice(0, MAX_HITS);
+  state.hits = keepFavs([...stamped, ...state.hits]);
   state.unread += stamped.length;
   save();
 
@@ -544,7 +559,8 @@ function doAction(type, p, fromWeb = false) {
     case 'installUpdate': if (!fromWeb) installUpdate(); break;
     case 'checkUpdate': if (!fromWeb) checkUpdate(); break;
     case 'deleteHit': { const ids = new Set([].concat(p)); const before = state.hits.length; state.hits = state.hits.filter((h, i) => { const del = ids.has(h.id); if (del && i < state.unread) state.unread--; return !del; }); state.unread = Math.max(0, Math.min(state.unread, state.hits.length)); if (state.hits.length !== before) save(); break; }
-    case 'clearHits': state.hits = []; state.unread = 0; save(); break;
+    case 'clearHits': state.hits = state.hits.filter((h) => h.fav); state.unread = 0; save(); break; // les favoris restent
+    case 'toggleFav': { const h = state.hits.find((x) => x.id === p); if (h) { h.fav = !h.fav; save(); } break; }
     case 'updateGroup': {
       const ids = new Set([].concat(p && p.ids || []));
       state.watches.filter((w) => ids.has(w.id)).forEach((w) => {
@@ -718,6 +734,7 @@ app.whenReady().then(() => {
   showMain();
   scheduleAll();
   listenCmds();
+  cleanOldHits(); setInterval(cleanOldHits, 5 * 60000);
   setTimeout(pushState, 8000);
   setInterval(pushState, 2 * 3600 * 1000); // état complet toutes les 2 h
   // Signe de vie toutes les 10 min, envoyé seulement si au moins une recherche a vraiment tourné :

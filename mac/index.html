@@ -35,6 +35,7 @@ main{max-width:1180px;margin:0 auto;padding:22px 24px 60px;display:block}
 .hit .m{color:var(--mut);font-size:12px}
 .hit .go{margin-top:8px;display:flex;gap:6px}
 .hit .go button{flex:1}
+.hit .fav{position:absolute;top:8px;right:42px;width:28px;height:28px;padding:0;border-radius:99px;background:rgba(0,0,0,.6);border:0;color:#ffd34d;font-size:16px;line-height:28px}.hit.isfav{border-color:#ffd34d}
 .hit .del{position:absolute;top:8px;right:8px;width:28px;height:28px;padding:0;border-radius:99px;background:rgba(0,0,0,.6);border:0;color:#fff;font-size:14px}
 .hit .del:hover{background:var(--bad);color:#fff}
 .edit{margin-top:12px;background:var(--card2);border-radius:10px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -100,8 +101,8 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
   <!-- ANNONCES -->
   <section class="view on" id="v-feed">
     <div class="head">
-      <div><h1>Nouvelles annonces</h1><p>Les annonces sorties depuis que tu surveilles, de la plus récente à la plus ancienne. Clique pour ouvrir l'annonce sur le site.</p></div>
-      <div style="display:flex;gap:8px"><button id="btnClear">Tout marquer comme vu</button><button id="btnClearAll">Effacer toutes les annonces</button></div>
+      <div><h1>Nouvelles annonces</h1><p>Les plus récentes en premier. Chaque annonce s'efface toute seule au bout d'1 h, sauf celles que tu mets en favori ☆.</p></div>
+      <div style="display:flex;gap:8px"><button id="favToggle">★ Favoris</button><button id="btnClear">Tout marquer comme vu</button><button id="btnClearAll">Effacer toutes les annonces</button></div>
     </div>
     <div class="feed" id="feed"></div>
   </section>

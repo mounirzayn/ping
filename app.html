@@ -37,6 +37,7 @@ html,body{overscroll-behavior-y:none}
 .cote{display:inline-block;margin-left:4px;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:middle}.cote.good{background:rgba(61,255,140,.15);color:#3dff8c}.cote.mid{background:rgba(139,147,167,.18);color:#c3c9d6}.cote.high{background:rgba(255,140,60,.15);color:#ff9a4d}
 .hit .t{font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hit .m{color:var(--mut);font-size:12px;margin-top:3px}
+.hit .star{position:absolute;top:6px;right:40px;width:28px;height:28px;border-radius:99px;border:0;background:rgba(0,0,0,.55);color:#ffd34d;font-size:16px;line-height:28px;padding:0}.hit:has(.star.on){border-color:#ffd34d}
 .hit{position:relative}.hit .x{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:99px;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:13px}
 .hit.fresh{border-color:var(--acc);animation:pop .6s}
 @keyframes pop{from{transform:scale(.97);box-shadow:0 0 0 4px rgba(57,255,136,.3)}to{transform:none}}
@@ -88,7 +89,7 @@ a.link{color:var(--acc)}
 </header>
 <main>
   <div class="view on" id="v-feed">
-    <div style="display:flex;justify-content:space-between;align-items:center"><h2>Flux en direct</h2><button class="b" id="clearFeed" style="padding:5px 10px;font-size:12px">Tout effacer</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center"><h2>Flux en direct</h2><div style="display:flex;gap:6px"><button class="b" id="favBtn" style="padding:5px 10px;font-size:12px">★</button><button class="b" id="clearFeed" style="padding:5px 10px;font-size:12px">Tout effacer</button></div></div>
     <div id="feed"></div>
   </div>
 
@@ -267,10 +268,15 @@ if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message',
 setInterval(() => { if (!document.hidden) refresh(); }, 60000); // filet de sécurité
 
 $('#feed').addEventListener('click', (e) => {
+  const f = e.target.closest('[data-fav]');
+  if (f) { e.preventDefault(); e.stopPropagation(); toggleFav(f.dataset.fav); return; }
   const x = e.target.closest('[data-hide]'); if (!x) return;
-  e.preventDefault(); e.stopPropagation(); hidden.add(x.dataset.hide); saveHidden(); renderFeed();
+  e.preventDefault(); e.stopPropagation(); const id = x.dataset.hide; hidden.add(id); saveHidden();
+  if (favs[id]) { delete favs[id]; saveFavs(); }
+  renderFeed();
 });
-$('#clearFeed').onclick = () => { hits.forEach((h) => hidden.add(h.id)); saveHidden(); renderFeed(); toast('Annonces effacées'); };
+$('#clearFeed').onclick = () => { hits.forEach((h) => { if (!favs[h.id]) hidden.add(h.id); }); saveHidden(); renderFeed(); toast('Annonces effacées (favoris gardés)'); };
+$('#favBtn').onclick = () => { favOnly = !favOnly; cardEls.forEach((n) => n.remove()); cardEls.clear(); renderFeed(); };
 
 // ---------- Commandes vers le Mac ----------
 async function send(cmd, p) {
@@ -321,10 +327,20 @@ function coteBadge(price, cote) {
 }
 // Fil des annonces : on ne reconstruit jamais toute la liste (sinon les photos se rechargent et ça saccade).
 // Chaque carte est créée une fois, puis seulement déplacée ou mise à jour.
-const cardEls = new Map(); let feedLimit = 40;
+const cardEls = new Map(); let feedLimit = 40, favOnly = false;
+// Favoris : gardés sur ce téléphone, jamais effacés. Le reste s'efface tout seul au bout d'1 h.
+const HIT_TTL = 60 * 60000;
+const favsGet = () => { try { return JSON.parse(store.get('pingFavs') || '{}'); } catch { return {}; } };
+let favs = favsGet();
+const saveFavs = () => store.set('pingFavs', JSON.stringify(favs));
+function toggleFav(id) {
+  if (favs[id]) delete favs[id]; else { const h = hits.find((x) => x.id === id); if (h) favs[id] = h; }
+  saveFavs(); const node = cardEls.get(id); if (node) { node.remove(); cardEls.delete(id); } renderFeed();
+}
 function cardHtml(h) {
   return `<div class="img">${h.img ? `<img src="${esc(h.img)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : '🔔'}</div>
       <button class="x" data-hide="${esc(h.id)}" aria-label="Supprimer">✕</button>
+      <button class="star ${favs[h.id] ? 'on' : ''}" data-fav="${esc(h.id)}" aria-label="Favori">${favs[h.id] ? '★' : '☆'}</button>
       <div style="min-width:0">
         <div class="p">${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : 'Prix ?'} ${coteBadge(h.price, h.cote)}</div>
         <div class="t">${esc(h.title)}</div>
@@ -333,8 +349,12 @@ function cardHtml(h) {
 }
 function renderFeed() {
   const el = $('#feed');
-  const all = hits.filter((h) => !hidden.has(h.id));
-  if (!all.length) { el.innerHTML = `<div class="empty">Aucune nouvelle annonce sur les 12 dernières heures.<br><br>Dès que ton ordinateur en trouve une, elle apparaît ici.</div>`; cardEls.clear(); return; }
+  const now = Date.now();
+  const merged = [...hits]; for (const f of Object.values(favs)) if (!merged.some((h) => h.id === f.id)) merged.push(f);
+  merged.sort((a, b) => b.at - a.at);
+  const all = merged.filter((h) => !hidden.has(h.id) && (favs[h.id] || (!favOnly && now - h.at < HIT_TTL)));
+  const fb = $('#favBtn'); if (fb) fb.textContent = favOnly ? '← Tout' : `★ ${Object.keys(favs).length}`;
+  if (!all.length) { el.innerHTML = favOnly ? `<div class="empty">Aucun favori.<br><br>Appuie sur l’étoile ☆ d’une annonce pour la garder : elle ne s’effacera pas.</div>` : `<div class="empty">Aucune annonce dans la dernière heure.<br><br>Les annonces s’effacent au bout d’1 h, sauf tes favoris ☆.</div>`; cardEls.clear(); return; }
   const empty = el.querySelector('.empty'); if (empty) empty.remove();
   const shown = all.slice(0, feedLimit); const keep = new Set(shown.map((h) => h.id));
   for (const [id, node] of cardEls) if (!keep.has(id)) { node.remove(); cardEls.delete(id); }
@@ -483,7 +503,7 @@ document.querySelectorAll('nav button').forEach((b) => (b.onclick = () => go(b.d
 $('#copyTopic').onclick = async () => { try { await navigator.clipboard.writeText(topic); toast('Canal copié'); } catch { toast(topic); } };
 $('#pauseAll').onclick = async () => { if (await send('pauseAll')) toast('Envoyé au Mac'); };
 $('#resync').onclick = async () => { if (await send('refresh')) toast('Synchro demandée'); };
-setInterval(() => { if (document.hidden) return; renderSync(); tickAgo(); }, 30000); // seulement l'heure, pas toute la liste
+setInterval(() => { if (document.hidden) return; renderSync(); tickAgo(); renderFeed(); }, 30000); // l'heure + l'effacement au bout d'1 h // seulement l'heure, pas toute la liste
 
 boot();
 </script>

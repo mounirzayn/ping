@@ -74,6 +74,7 @@ function coteBadge(price, cote) {
 }
 
 // ---------- Annonces ----------
+let favOnly = false;
 function renderFeed() {
   const el = $('#feed');
   if (!S.hits.length) {
@@ -81,18 +82,24 @@ function renderFeed() {
     el.innerHTML = `<div class="empty" style="grid-column:1/-1"><b>${any ? 'Aucune nouvelle annonce pour le moment' : 'Aucune recherche en cours'}</b>${any ? 'Ping a mémorisé les annonces déjà en ligne. Tu seras prévenu dès qu\'une nouvelle sort.' : 'Crée ta première recherche dans « + Nouvelle recherche ».'}</div>`;
     return;
   }
-  el.innerHTML = S.hits.slice(0, 200).map((h, i) => `
-    <div class="hit ${i < S.unread ? 'new' : ''}">
-      <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : 'Pas de photo'}<span class="site s-${esc(h.site)}">${esc(h.site)}</span><button class="del" data-del="${esc(h.id)}" title="Supprimer cette annonce">✕</button></div>
+  const list = favOnly ? S.hits.filter((h) => h.fav) : S.hits;
+  const nFav = S.hits.filter((h) => h.fav).length;
+  $('#favToggle').textContent = favOnly ? '← Toutes les annonces' : `★ Favoris (${nFav})`;
+  if (!list.length) { el.innerHTML = `<div class="empty" style="grid-column:1/-1"><b>Aucun favori</b>Clique sur l'étoile ☆ d'une annonce pour la garder : elle ne s'effacera pas au bout d'1 h.</div>`; return; }
+  el.innerHTML = list.slice(0, 200).map((h, i) => `
+    <div class="hit ${!favOnly && i < S.unread ? 'new' : ''} ${h.fav ? 'isfav' : ''}">
+      <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : 'Pas de photo'}<span class="site s-${esc(h.site)}">${esc(h.site)}</span><button class="fav" data-fav="${esc(h.id)}" title="${h.fav ? 'Retirer des favoris' : 'Garder en favori (ne s’efface pas)'}">${h.fav ? '★' : '☆'}</button><button class="del" data-del="${esc(h.id)}" title="Supprimer cette annonce">✕</button></div>
       <div class="b">
         <div class="p">${eur(h.price)} ${coteBadge(h.price, coteOfHit(h))}</div>
         <div class="t">${esc(h.title)}</div>
-        <div class="m">${esc(h.watchName)} · ${ago(h.at)}</div>
+        <div class="m">${esc(h.watchName)} · ${ago(h.at)}${h.fav ? ' · gardée' : ` · s’efface dans ${Math.max(1, Math.round((h.at + 3600000 - Date.now()) / 60000))} min`}</div>
         <div class="go"><button data-ext="${esc(h.url)}">Voir l'annonce ↗</button></div>
       </div>
     </div>`).join('');
 }
 $('#feed').onclick = (e) => {
+  const f = e.target.closest('[data-fav]');
+  if (f) { e.stopPropagation(); act('toggleFav', f.dataset.fav); return; }
   const d = e.target.closest('[data-del]');
   if (d) { e.stopPropagation(); act('deleteHit', d.dataset.del); return; }
   const b = e.target.closest('[data-ext]');
@@ -215,10 +222,11 @@ const webLink = () => (S.siteUrl || '') + 'app.html#' + S.ntfyTopic;
 $('#btnWeb').onclick = () => act('openExternal', webLink());
 $('#btnWebCopy').onclick = () => { navigator.clipboard.writeText(webLink()); toast('Lien copié'); };
 $('#btnClear').onclick = () => act('clearUnread');
+$('#favToggle').onclick = () => { favOnly = !favOnly; renderFeed(); };
 $('#btnClearAll').onclick = (e) => {
   const b = e.currentTarget;
   if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Confirmer : tout effacer ?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Effacer toutes les annonces'; }, 4000); return; }
-  act('clearHits'); toast('Annonces effacées');
+  act('clearHits'); toast('Annonces effacées (tes favoris sont gardés)');
 };
 $('#btnCopy').onclick = () => { navigator.clipboard.writeText($('#topic').textContent); toast('Code copié'); };
 $('#btnTest').onclick = () => { act('testPush'); toast('Alerte de test envoyée'); };

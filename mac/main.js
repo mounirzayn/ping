@@ -576,7 +576,7 @@ app.on('web-contents-created', (_e, wc) => {
 ipcMain.handle('getState', () => publicState());
 // N'importe quel site d'annonces en https (pas d'adresse locale ni d'IP)
 const ALLOWED_URL = /^https:\/\/(?!localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[|\d+\.\d+\.\d+\.\d+)[a-z0-9.-]+\.[a-z]{2,}(\/|$)/i;
-function doAction(type, p, fromWeb = false) {
+async function doAction(type, p, fromWeb = false) {
   const find = (id) => state.watches.find((w) => w.id === id);
   switch (type) {
     case 'addWatches': {
@@ -616,6 +616,20 @@ function doAction(type, p, fromWeb = false) {
     case 'setTopic': if (!fromWeb) { state.ntfyTopic = p; save(); listenCmds(); pushState(); } break;
     case 'setDesktop': if (!fromWeb) { state.desktopNotif = !!p; save(); } break;
     case 'setSound': if (!fromWeb) { state.soundOn = !!p; save(); } break;
+    case 'ntfyLogin': { // crée une clé d'accès sur le compte ntfy (le mot de passe n'est jamais enregistré)
+      if (fromWeb) break;
+      const { user, pass } = p || {};
+      try {
+        const r = await fetch('https://ntfy.sh/v1/account/token', { method: 'POST',
+          headers: { Authorization: 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64'), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label: 'Ping (' + os.hostname().slice(0, 20) + ')', expires: 0 }) });
+        if (r.status === 401) return { ok: false, err: 'Identifiant ou mot de passe incorrect' };
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.token) return { ok: false, err: 'ntfy a refusé (' + r.status + ')' };
+        state.ntfyToken = j.token; ntfyBlockedUntil = 0; save(); pushState();
+        return { ok: true };
+      } catch { return { ok: false, err: 'Pas de connexion à ntfy' }; }
+    }
     case 'setNtfyToken': if (!fromWeb) { state.ntfyToken = String(p || '').trim().slice(0, 80); ntfyBlockedUntil = 0; save(); pushState(); } break;
     case 'openBrowser': if (!fromWeb) openBrowser(p); break;
     case 'openExternal': if (!fromWeb && /^https:\/\//.test(p)) shell.openExternal(p); break;

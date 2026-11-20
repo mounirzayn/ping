@@ -241,6 +241,14 @@ $('#btnTopic').onclick = () => {
   if (v.length < 6) return toast('6 caractères minimum');
   act('setTopic', v); toast('Code enregistré');
 };
+$('#btnNtfyLogin').onclick = async () => {
+  const user = $('#ntfyUser').value.trim(), pass = $('#ntfyPass').value;
+  if (!user || !pass) return toast('Identifiant et mot de passe ntfy');
+  $('#btnNtfyLogin').textContent = 'Connexion…';
+  const r = await act('ntfyLogin', { user, pass });
+  $('#btnNtfyLogin').textContent = 'Connecter'; $('#ntfyPass').value = '';
+  toast(r && r.ok ? 'Compte ntfy connecté ✅' : (r && r.err) || 'Échec de la connexion');
+};
 $('#btnToken').onclick = () => {
   const v = $('#ntfyToken').value.trim();
   if (v && !/^tk_[A-Za-z0-9]{10,}$/.test(v)) return toast('La clé doit commencer par tk_');

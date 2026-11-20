@@ -110,6 +110,7 @@ a.link{color:var(--acc)}
         <label>Prix min (€)<input id="fMin" type="number" inputmode="numeric" placeholder="0"></label>
         <label>Prix max (€)<input id="fMax" type="number" inputmode="numeric" placeholder="350"></label>
       </div>
+      <label style="display:block;margin-bottom:12px">Alerter pour<select id="fDeal" style="width:100%;margin-top:6px"><option value="0">Toutes les annonces</option><option value="15">💎 Pépites : 15 % sous la cote</option><option value="25">💎 Pépites : 25 % sous la cote</option><option value="35">💎 Pépites : 35 % sous la cote</option><option value="50">💎 Pépites : 50 % sous la cote</option></select></label>
       <label class="chip" style="border-radius:12px;margin-bottom:12px"><input type="checkbox" id="fStrict" checked> Uniquement l'objet (ignorer accessoires et jeux vendus seuls)</label>
       <label>Exclure les annonces contenant<input id="fExclude" placeholder="cassé, hs, pièces, échange"></label>
       <label>Fréquence<select id="fInterval"><option value="30">30 s (rapide)</option><option value="45">45 s</option><option value="60" selected>1 min (recommandé)</option><option value="120">2 min</option><option value="300">5 min</option></select></label>
@@ -432,7 +433,7 @@ $('#newForm').onsubmit = async (e) => {
   if (!custom && !sites.length) return toast('Choisis au moins un site');
   if (!custom && g.cityRequired && !city) return toast('Indique la ville');
   if (!custom && !q && (cat === 'tout' || !['immobilier', 'vehicules'].includes(g.id))) return toast('Écris ce que tu cherches');
-  const base = { group: crypto.randomUUID(), city, include: q, name: $('#fName').value.trim() || q.split(',')[0].trim() || CATS[cat].label, cat, min: $('#fMin').value, max: $('#fMax').value, exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked };
+  const base = { group: crypto.randomUUID(), city, include: q, name: $('#fName').value.trim() || q.split(',')[0].trim() || CATS[cat].label, cat, min: $('#fMin').value, max: $('#fMax').value, exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked, minDeal: +$('#fDeal').value };
   const q1 = q.split(',')[0].trim();
   const host = (() => { try { return new URL(custom).hostname.replace(/^www\./, ''); } catch { return ''; } })();
   const list = custom ? [{ ...base, name: base.name || host, site: host, url: custom }] : sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, base.min, base.max, city) }));

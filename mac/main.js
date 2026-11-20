@@ -315,6 +315,8 @@ function coteForItem(w, title) {
   return c;
 }
 // Mode objet seul : bien en dessous de la cote = presque toujours un accessoire, une pièce ou une arnaque
+// Mode Pépites : seulement les annonces au moins X % sous leur cote (pas de cote = pas d'alerte)
+const dealOk = (w, it, c) => !w.minDeal || !!(c && it.price != null && it.price <= c.med * (1 - w.minDeal / 100));
 const belowCote = (w, it, c) => !!(w.strict && c && it.price != null && it.price < c.med * 0.4);
 async function checkCote(id) {
   const w0 = state.watches.find((x) => x.id === id); if (!w0) return;
@@ -392,7 +394,7 @@ async function check(id, manual = false) {
   const fresh = result.items.filter((it) => !seen.has(it.id));
   result.items.forEach((it) => seen.add(it.id));
   w.seen = [...seen].slice(-MAX_SEEN);
-  const hits = w.primed ? fresh.filter((it) => matches(w, it) && !belowCote(w, it, coteForItem(w, it.title))) : [];
+  const hits = w.primed ? fresh.filter((it) => { const c = coteForItem(w, it.title); return matches(w, it) && !belowCote(w, it, c) && dealOk(w, it, c); }) : [];
   w.primed = true; // premier passage : mémorise l'existant sans notifier
   w.count = (w.count || 0) + hits.length;
 
@@ -407,7 +409,7 @@ async function check(id, manual = false) {
   const overBudget = state.alertDay === today() && (state.alertCount || 0) >= budget;
   const solo = overBudget ? [] : stamped.slice(0, state.ntfyToken ? MAX_NOTIF_PER_CYCLE : 2); // abonnement : jusqu'à 6 alertes détaillées par passage
   solo.forEach((h) => notify({
-    title: `🔔 ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.name}`,
+    title: `${h.cote && h.price != null && h.price <= h.cote * 0.75 ? '💎' : '🔔'} ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.name}`,
     message: `${h.title}\n${h.site}${coteLine(h.price, h.cote)}`,
     url: h.url, img: h.img,
   }));
@@ -606,7 +608,7 @@ async function doAction(type, p, fromWeb = false) {
       const list = (Array.isArray(p) ? p : []).filter((w) => w && ALLOWED_URL.test(w.url || '')).slice(0, 8).map((w) => ({
         group: String(w.group || '').slice(0, 64) || undefined, name: String(w.name || 'Ping').slice(0, 60), site: String(w.site || '').slice(0, 20), cat: String(w.cat || 'tout'),
         url: w.url, min: w.min ?? '', max: w.max ?? '', include: String(w.include || ''), exclude: String(w.exclude || '').slice(0, 300),
-        interval: Math.max(MIN_INTERVAL, +w.interval || 60), strict: !!w.strict, city: String(w.city || '').slice(0, 60),
+        interval: Math.max(MIN_INTERVAL, +w.interval || 60), strict: !!w.strict, minDeal: Math.max(0, Math.min(80, +w.minDeal || 0)), city: String(w.city || '').slice(0, 60),
         id: crypto.randomUUID(), seen: [], primed: false, count: 0, status: 'pending', active: true,
       }));
       state.watches.push(...list); save(); scheduleAll(); break;
@@ -628,6 +630,7 @@ async function doAction(type, p, fromWeb = false) {
         if (p.include !== undefined && String(p.include).trim()) w.include = String(p.include).slice(0, 200);
         if (p.min !== undefined) w.min = p.min; if (p.max !== undefined) w.max = p.max;
         if (p.strict !== undefined) w.strict = !!p.strict;
+        if (p.minDeal !== undefined) w.minDeal = Math.max(0, Math.min(80, +p.minDeal || 0));
         w.url = rewriteUrl(w.url, String(w.include || '').split(',')[0].trim(), w.min, w.max);
         w.seen = []; w.primed = false; w.cote = null; // nouvelle base (et nouvelle cote)
       });

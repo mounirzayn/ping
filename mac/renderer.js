@@ -48,7 +48,7 @@ $('#btnAdd').onclick = async () => {
   const group = crypto.randomUUID();
   const base = {
     group, city, name: variants[0] || (custom ? siteOf(custom) : CATS[cat].label + (city ? ' · ' + city : '')), cat, min: $('#fMin').value, max: $('#fMax').value,
-    include: variants.join(', '), exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked,
+    include: variants.join(', '), exclude: $('#fExclude').value, interval: +$('#fInterval').value, strict: $('#fStrict').checked, minDeal: +$('#fDeal').value,
   };
   const list = [];
   if (custom) {
@@ -132,12 +132,14 @@ function renderGroups() {
       </div>
       <div style="display:flex;gap:6px"><button class="mini" data-gedit="${esc(ws.map((w) => w.id).join(','))}">Modifier</button><button class="mini" data-gdel="${esc(ws.map((w) => w.id).join(','))}">Supprimer</button></div></div>
       ${w0.strict ? '<div class="f" style="color:var(--acc)">✓ Uniquement l\'objet (accessoires ignorés)</div>' : ''}
+      ${w0.minDeal ? `<div class="f" style="color:#7fd4ff">💎 Pépites : seulement à ${w0.minDeal} % ou plus sous la cote</div>` : ''}
       <div class="edit" data-editbox="${esc(ws.map((w) => w.id).join(','))}" style="display:none">
         <label class="wide">Mots-clés<input data-k="include" value="${esc(w0.include || w0.name)}"></label>
         <label>Prix min (€)<input data-k="min" type="number" value="${esc(w0.min)}"></label>
         <label>Prix max (€)<input data-k="max" type="number" value="${esc(w0.max)}"></label>
         <label class="wide">Ignorer les annonces qui contiennent<input data-k="exclude" value="${esc(w0.exclude)}" placeholder="ex : housse, jeu, cassé"></label>
         <label class="wide" style="flex-direction:row;align-items:center;gap:8px;color:var(--txt)"><input type="checkbox" data-k="strict" ${w0.strict ? 'checked' : ''}> Uniquement l'objet lui-même (ignorer accessoires et jeux)</label>
+        <label class="wide">Alerter pour<select data-k="minDeal">${[0, 15, 25, 35, 50].map((n) => `<option value="${n}" ${(+w0.minDeal || 0) === n ? 'selected' : ''}>${n ? `💎 Pépites : ${n} % sous la cote` : 'Toutes les annonces'}</option>`).join('')}</select></label>
         <div class="wide"><button class="mini" data-gsave="${esc(ws.map((w) => w.id).join(','))}" style="background:var(--acc);color:#04120a;border:0;font-weight:700">Enregistrer</button></div>
       </div>
       <div class="rows">${ws.map((w) => `
@@ -163,7 +165,7 @@ $('#groups').onclick = async (e) => {
   if (sv) {
     const box = document.querySelector(`[data-editbox="${sv.dataset.gsave}"]`);
     const v = (k) => box.querySelector(`[data-k="${k}"]`);
-    await act('updateGroup', { ids: sv.dataset.gsave.split(','), include: v('include').value, min: v('min').value, max: v('max').value, exclude: v('exclude').value, strict: v('strict').checked });
+    await act('updateGroup', { ids: sv.dataset.gsave.split(','), include: v('include').value, min: v('min').value, max: v('max').value, exclude: v('exclude').value, strict: v('strict').checked, minDeal: +v('minDeal').value });
     editing = false; toast('Recherche mise à jour'); render(); return;
   }
   const del = e.target.closest('[data-gdel]');

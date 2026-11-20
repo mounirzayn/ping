@@ -137,6 +137,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
           </select></label>
         <label>Ignorer les annonces qui contiennent <small>Ex : cassé, pièces</small>
           <input id="fExclude" placeholder="cassé, hs, pièces"></label>
+        <label class="wide">Alerter pour<select id="fDeal"><option value="0">Toutes les annonces</option><option value="15">💎 Pépites : 15 % sous la cote</option><option value="25">💎 Pépites : 25 % sous la cote</option><option value="35">💎 Pépites : 35 % sous la cote</option><option value="50">💎 Pépites : 50 % sous la cote</option></select><small style="color:var(--mut)">Pépites : seulement si le prix est bien sous la cote (idéal pour la revente). Il faut quelques heures à Ping pour apprendre les prix.</small></label>
         <label class="wide chip" style="border-radius:12px;justify-content:flex-start"><input type="checkbox" id="fStrict"> <span><b>Uniquement l'objet lui-même</b><br><small>Ignore les accessoires vendus seuls, les annonces « recherche » et les échanges</small></span></label>
         <div class="wide"><label>Sites surveillés pour cette catégorie</label>
           <div class="sites" id="siteChips" style="margin-top:6px"></div></div>

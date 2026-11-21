@@ -193,7 +193,10 @@ function parseHit(m) {
   const [title, site, coteL] = (m.message || '').split('\n');
   const cm = (coteL || '').match(/Cote ~([\d\s\u202f\u00a0.,]+)\s*€/);
   const cote = cm ? parseFloat(cm[1].replace(/[\s\u202f\u00a0.]/g, '').replace(',', '.')) : null;
-  return { id: m.id, at: m.time * 1000, price, watch, title, site: site || '', url: m.click, img: m.attachment ? m.attachment.url : null, cote };
+  const mm = (coteL || '').match(/marge ~([+-−]?[\d\s\u202f\u00a0.,]+)\s*€/);
+  const marge = mm ? parseFloat(mm[1].replace(/[\s\u202f\u00a0.+]/g, '').replace('−', '-').replace(',', '.')) : null;
+  const ventes = /ventes eBay/.test(coteL || '');
+  return { id: m.id, at: m.time * 1000, price, watch, title, site: site || '', url: m.click, img: m.attachment ? m.attachment.url : null, cote, marge, ventes };
 }
 const etatParts = {};
 function handle(m, live) {
@@ -344,7 +347,7 @@ function cardHtml(h) {
       <button class="x" data-hide="${esc(h.id)}" aria-label="Supprimer">✕</button>
       <button class="star ${favs[h.id] ? 'on' : ''}" data-fav="${esc(h.id)}" aria-label="Favori">${favs[h.id] ? '★' : '☆'}</button>
       <div style="min-width:0">
-        <div class="p">${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : 'Prix ?'} ${coteBadge(h.price, h.cote)}</div>
+        <div class="p">${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : 'Prix ?'} ${coteBadge(h.price, h.cote)}${h.marge != null ? `<span class="cote ${h.marge > 0 ? 'good' : 'high'}">marge ~${h.marge > 0 ? '+' : ''}${h.marge.toLocaleString('fr-FR')} €${h.ventes ? ' ✓' : ''}</span>` : ''}</div>
         <div class="t">${esc(h.title)}</div>
         <div class="m">${esc(h.site)} · ${esc(h.watch)} · <span class="ago" data-at="${h.at}">${ago(h.at)}</span></div>
       </div>`;

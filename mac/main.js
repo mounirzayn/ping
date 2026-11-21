@@ -77,7 +77,7 @@ function save() {
   broadcast();
   maybePushState();
 }
-const publicState = () => ({ ...state, onBattery: onBattery(), ntfyToken: undefined, hasNtfyToken: !!state.ntfyToken, usage: usageNow(), ntfyBlocked: ntfyBlocked(), siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
+const publicState = () => ({ ...state, sold: undefined, onBattery: onBattery(), ntfyToken: undefined, hasNtfyToken: !!state.ntfyToken, usage: usageNow(), ntfyBlocked: ntfyBlocked(), siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
 function broadcast() {
   BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('state', publicState()); });
   updateBadge();
@@ -311,29 +311,89 @@ const COTE_STOP = new Set(('a au aux avec de des du en et la le les l d un une p
   'nouveau nouvelle original origine garantie facture boite carton complet complete super top etc tout toute plus mois an ans').split(' '));
 const tokens = (t) => [...new Set(String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   .split(/[^a-z0-9]+/).filter((x) => x.length >= 2 && !COTE_STOP.has(x)))];
-function coteForItem(w, title) {
-  const sample = groupSample(w.group || w.id).filter((x) => x.p > 1);
-  if (sample.length < 8) return null;
-  const toks = sample.map((x) => new Set(tokens(x.t)));
-  const df = new Map(); toks.forEach((set) => set.forEach((k) => df.set(k, (df.get(k) || 0) + 1)));
-  const N = sample.length;
-  const idf = (k) => Math.min(1.5, Math.log((N + 1) / ((df.get(k) || 0) + 1))) + (/\d/.test(k) ? 0.3 : 0); // un mot rare compte, sans tout écraser
-  const T = tokens(title).filter((k) => df.has(k)); // un mot jamais vu ailleurs ne peut pas servir de comparaison
-  const distinctive = T.filter((k) => (df.get(k) || 0) <= N * 0.5);
-  if (!distinctive.length) return null; // titre trop vague pour être comparé
-  const total = T.reduce((a, k) => a + idf(k), 0);
-  const scored = [];
-  toks.forEach((set, i) => {
-    let sc = 0; for (const k of T) if (set.has(k)) sc += idf(k);
-    if (total > 0 && sc / total >= 0.5 && distinctive.some((k) => set.has(k))) scored.push([sc, sample[i].p]);
-  });
-  scored.sort((a, b) => b[0] - a[0]);
-  const c = coteOf(scored.slice(0, 20).map((x) => x[1]), 4);
-  return c;
+// Annonces semblables dans un échantillon {t, p} :
+// - le numéro de modèle doit être le même (3070 ≠ 3080, ps5 ≠ ps4, v15 ≠ v11, iPhone 13 ≠ 14)
+// - les variantes qui changent le prix doivent être identiques (Ti, Super, Pro, Max, Slim, OLED, Digital…)
+// - la capacité (Go/To) n'est qu'un plus. Sans numéro de modèle, on compare sur les mots rares du titre.
+const MODIFIERS = new Set(['ti', 'super', 'pro', 'max', 'plus', 'mini', 'ultra', 'slim', 'oled', 'lite', 'digital', 'digitale', 'xl', 'xt', 'xtx', 'air', 'elite', 'fat']);
+const isCapacity = (k) => /^\d+(go|gb|to|tb|mo)$/.test(k);
+const isModel = (k) => /\d/.test(k) && !isCapacity(k) && !/^(19|20)\d\d$/.test(k) && k.length <= 10; // pas les années
+function similarPrices(sample, title) {
+  sample = sample.filter((x) => x.p > 1);
+  if (sample.length < 4) return [];
+  const T = tokens(title);
+  const items = sample.map((x) => ({ p: x.p, set: new Set(tokens(x.t)) }));
+  const known = new Set(); items.forEach(({ set }) => set.forEach((k) => known.add(k)));
+  // un chiffre jamais vu dans les autres annonces (« 3x » ventilateurs, référence vendeur) ne compte pas comme modèle
+  const models = T.filter((k) => isModel(k) && known.has(k)), mods = T.filter((k) => MODIFIERS.has(k));
+  let out;
+  if (models.length) {
+    out = items.filter(({ set }) => models.every((k) => set.has(k))
+      && mods.every((k) => set.has(k)) && [...set].filter((k) => MODIFIERS.has(k)).every((k) => mods.includes(k)));
+    // la capacité départage quand il y a assez de choix
+    const caps = T.filter(isCapacity);
+    if (caps.length) { const same = out.filter(({ set }) => caps.every((k) => set.has(k))); if (same.length >= 4) out = same; }
+  } else {
+    const df = new Map(); items.forEach(({ set }) => set.forEach((k) => df.set(k, (df.get(k) || 0) + 1)));
+    const N = items.length;
+    const rare = T.filter((k) => df.has(k) && df.get(k) <= N * 0.5);
+    if (!rare.length) return []; // titre trop vague (« ordinateur portable »)
+    out = items.filter(({ set }) => rare.filter((k) => set.has(k)).length >= Math.ceil(rare.length * 0.6));
+  }
+  return out.slice(0, 25).map((x) => x.p);
 }
+const quantile = (a, q) => { const b = [...a].sort((x, y) => x - y); const i = (b.length - 1) * q; const lo = Math.floor(i); return b[lo] + (b[Math.ceil(i)] - b[lo]) * (i - lo); };
+// Cote d'une annonce. Priorité aux VENTES RÉELLES (ventes terminées eBay) : c'est le vrai prix de revente.
+// À défaut, les prix demandés dans les annonces en ligne, corrigés de -10 % (on vend rarement au prix affiché).
+// « fiable » = assez d'objets semblables et des prix qui se tiennent : seules les cotes fiables déclenchent les Pépites.
+function coteForItem(w, title) {
+  const g = w.group || w.id;
+  const fromSold = similarPrices(((state.sold || {})[g] || {}).items || [], title);
+  let src = 'ventes', prices = fromSold;
+  if (fromSold.length < 4) { src = 'annonces'; prices = similarPrices(groupSample(g), title); }
+  const c = coteOf(prices, 4);
+  if (!c) return null;
+  const m0 = median(prices), kept = prices.filter((x) => x >= m0 * 0.35 && x <= m0 * 2.5);
+  const spread = (quantile(kept, 0.75) - quantile(kept, 0.25)) / c.med;
+  const med = Math.round(src === 'ventes' ? c.med : c.med * 0.9);
+  return { med, n: c.n, src, fiable: c.n >= 6 && spread <= 0.5 };
+}
+// Ce que tu peux espérer gagner : revente à la cote, moins ~8 % (négociation, frais), moins le prix d'achat
+const marginOf = (price, c) => (c && price != null ? Math.round(c.med * 0.92 - price) : null);
+// Mode Pépites : seulement les annonces au moins X % sous leur cote, et seulement si la cote est fiable
+const dealOk = (w, it, c) => !w.minDeal || !!(c && c.fiable && it.price != null && it.price <= c.med * (1 - w.minDeal / 100));
+
+// Ventes terminées eBay pour un groupe de recherche (toutes les 12 h) : les vrais prix de revente
+const SOLD_EVERY = 12 * 3600 * 1000;
+async function checkSold(g) {
+  const w0 = state.watches.find((x) => (x.group || x.id) === g); if (!w0) return;
+  const q = String(w0.include || w0.name || '').split(',')[0].replace(/💎/g, '').trim();
+  if (!q) return;
+  const url = 'https://www.ebay.fr/sch/i.html?_nkw=' + encodeURIComponent(q) + '&LH_Sold=1&LH_Complete=1&_sop=13&_ipg=120';
+  const key = 'sold:' + g;
+  let items = [];
+  try {
+    const bw = getWorker(key);
+    await Promise.race([bw.loadURL(url).catch(() => {}), sleep(30000)]);
+    await sleep(2500 + Math.random() * 1500);
+    for (const y of [900, 1800, 2700, 3600, 4500]) {
+      await withTimeout(bw.webContents.executeJavaScript(`window.scrollTo(0, ${y}); true`).catch(() => {}), 5000);
+      await sleep(400);
+    }
+    const r = await withTimeout(bw.webContents.executeJavaScript(`(${extractListings.toString()})()`), 20000, null);
+    if (r && !r.blocked) items = r.items || [];
+  } catch {}
+  const free = { ...w0, min: '', max: '' };
+  const fresh = items.filter((it) => it.price != null && matches(free, it)).map((it) => ({ t: String(it.title).replace(/^nouvelle annonce\s*/i, '').slice(0, 90), p: it.price }));
+  state.sold = state.sold || {};
+  const prev = (state.sold[g] && state.sold[g].items) || [];
+  const seenK = new Set(); const all = [];
+  for (const x of [...fresh, ...prev]) { const k = x.t + '|' + x.p; if (!seenK.has(k)) { seenK.add(k); all.push(x); } }
+  state.sold[g] = { items: all.slice(0, 300), at: Date.now() };
+  save();
+}
+
 // Mode objet seul : bien en dessous de la cote = presque toujours un accessoire, une pièce ou une arnaque
-// Mode Pépites : seulement les annonces au moins X % sous leur cote (pas de cote = pas d'alerte)
-const dealOk = (w, it, c) => !w.minDeal || !!(c && it.price != null && it.price <= c.med * (1 - w.minDeal / 100));
 const belowCote = (w, it, c) => !!(w.strict && c && it.price != null && it.price < c.med * 0.4);
 async function checkCote(id) {
   const w0 = state.watches.find((x) => x.id === id); if (!w0) return;
@@ -407,6 +467,7 @@ async function check(id, manual = false) {
 
   w.status = 'ok'; w.statusMsg = ''; w.blockedNotified = false;
   if (!w.cote || Date.now() - w.cote.at > COTE_EVERY) enqueue(() => checkCote(w.id), 'cote:' + w.id);
+  { const g = w.group || w.id; const sd = (state.sold || {})[g]; if (!sd || Date.now() - sd.at > SOLD_EVERY) enqueue(() => checkSold(g), 'sold:' + g); }
   const seen = new Set(w.seen || []);
   const fresh = result.items.filter((it) => !seen.has(it.id));
   result.items.forEach((it) => seen.add(it.id));
@@ -415,7 +476,7 @@ async function check(id, manual = false) {
   w.primed = true; // premier passage : mémorise l'existant sans notifier
   w.count = (w.count || 0) + hits.length;
 
-  const stamped = hits.map((h) => { const c = coteForItem(w, h.title); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, at: Date.now(), cote: c ? c.med : null, coteN: c ? c.n : 0 }; });
+  const stamped = hits.map((h) => { const c = coteForItem(w, h.title); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, at: Date.now(), cote: c ? c.med : null, coteN: c ? c.n : 0, coteSrc: c ? c.src : null, fiable: c ? c.fiable : false, marge: marginOf(h.price, c) }; });
   state.hits = keepFavs([...stamped, ...state.hits]);
   state.unread += stamped.length;
   save();
@@ -427,7 +488,7 @@ async function check(id, manual = false) {
   const solo = overBudget ? [] : stamped.slice(0, state.ntfyToken ? MAX_NOTIF_PER_CYCLE : 2); // abonnement : jusqu'à 6 alertes détaillées par passage
   solo.forEach((h) => notify({
     title: `${h.cote && h.price != null && h.price <= h.cote * 0.75 ? '💎' : '🔔'} ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.name}`,
-    message: `${h.title}\n${h.site}${coteLine(h.price, h.cote)}`,
+    message: `${h.title}\n${h.site}${coteLine(h.price, h.cote, h)}`,
     url: h.url, img: h.img,
   }));
   const rest = stamped.slice(solo.length);
@@ -515,10 +576,12 @@ function matches(w, it) {
   return !incl.length || incl.some((x) => t.includes(x)); // l'annonce doit contenir un des mots-clés (ou une variante)
 }
 
-function coteLine(price, cote) {
+function coteLine(price, cote, h = {}) {
   if (!cote || price == null) return '';
   const d = Math.round(((price - cote) / cote) * 100);
-  return `\nCote ~${cote.toLocaleString('fr-FR')} € · ${d > 0 ? '+' : ''}${d} %`;
+  const m = h.marge != null ? ` · marge ~${h.marge > 0 ? '+' : ''}${h.marge.toLocaleString('fr-FR')} €` : '';
+  const src = h.coteSrc === 'ventes' ? `${h.coteN} ventes eBay` : `${h.coteN || ''} annonces`;
+  return `\nCote ~${cote.toLocaleString('fr-FR')} € · ${d > 0 ? '+' : ''}${d} %${m} (${src}${h.fiable ? '' : ', peu fiable'})`;
 }
 
 // ---------- Envoi vers le téléphone (ntfy) ----------

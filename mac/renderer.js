@@ -66,11 +66,13 @@ $('#btnAdd').onclick = async () => {
 
 // ---------- Cote du marché ----------
 function coteOfHit(h) { return h.cote || null; } // cote propre à l'annonce (annonces semblables)
-function coteBadge(price, cote) {
+function coteBadge(price, cote, h = {}) {
   if (!cote || price == null) return '';
   const d = Math.round(((price - cote) / cote) * 100);
   const cls = d <= -10 ? 'good' : d >= 10 ? 'high' : 'mid';
-  return `<span class="cote ${cls}" title="Prix médian des annonces semblables (même marque, même modèle)">cote ~${eur(cote)} · ${d > 0 ? '+' : ''}${d} %</span>`;
+  const src = h.coteSrc === 'ventes' ? `d'après ${h.coteN} ventes réelles eBay` : `d'après ${h.coteN || 'quelques'} annonces en ligne (prix demandés -10 %)`;
+  const marge = h.marge != null ? `<span class="cote ${h.marge > 0 ? 'good' : 'high'}" title="Revente à la cote, moins ~8 % de négociation et frais">marge ~${h.marge > 0 ? '+' : ''}${eur(h.marge)}</span>` : '';
+  return `<span class="cote ${cls}" title="Cote ${src}${h.fiable ? '' : ' · peu d’annonces semblables : à vérifier'}">cote ~${eur(cote)} · ${d > 0 ? '+' : ''}${d} %${h.fiable ? '' : ' ?'}</span>${marge}`;
 }
 
 // ---------- Annonces ----------
@@ -90,7 +92,7 @@ function renderFeed() {
     <div class="hit ${!favOnly && i < S.unread ? 'new' : ''} ${h.fav ? 'isfav' : ''}">
       <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : 'Pas de photo'}<span class="site s-${esc(h.site)}">${esc(h.site)}</span><button class="fav" data-fav="${esc(h.id)}" title="${h.fav ? 'Retirer des favoris' : 'Garder en favori (ne s’efface pas)'}">${h.fav ? '★' : '☆'}</button><button class="del" data-del="${esc(h.id)}" title="Supprimer cette annonce">✕</button></div>
       <div class="b">
-        <div class="p">${eur(h.price)} ${coteBadge(h.price, coteOfHit(h))}</div>
+        <div class="p">${eur(h.price)} ${coteBadge(h.price, coteOfHit(h), h)}</div>
         <div class="t">${esc(h.title)}</div>
         <div class="m">${esc(h.watchName)} · ${ago(h.at)}${h.fav ? ' · gardée' : ` · s’efface dans ${Math.max(1, Math.round((h.at + 3600000 - Date.now()) / 60000))} min`}</div>
         <div class="go"><button data-ext="${esc(h.url)}">Voir l'annonce ↗</button></div>

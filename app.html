@@ -186,10 +186,10 @@ $('#logout').onclick = () => { store.del('pingTopic'); if (es) es.close(); locat
 
 // ---------- Lecture du canal (ntfy) ----------
 function parseHit(m) {
-  if (!m.title || !m.title.startsWith('🔔') || /Test Ping/.test(m.title)) return null;
-  const pm = m.title.match(/🔔\s*([\d\s  .,]+)\s*€/);
+  if (!m.title || !/^(🔔|💎)/.test(m.title) || /Test Ping|pendant la pause/.test(m.title)) return null; // 🔔 annonce, 💎 pépite
+  const pm = m.title.match(/^(?:🔔|💎)\s*([\d\s  .,]+)\s*€/);
   const price = pm ? parseFloat(pm[1].replace(/[\s  .]/g, '').replace(',', '.')) : null;
-  const watch = m.title.split('·').slice(pm ? 1 : 0).join('·').replace('🔔', '').trim();
+  const watch = m.title.split('·').slice(pm ? 1 : 0).join('·').replace(/🔔|💎/g, '').trim();
   const [title, site, coteL] = (m.message || '').split('\n');
   const cm = (coteL || '').match(/Cote ~([\d\s\u202f\u00a0.,]+)\s*€/);
   const cote = cm ? parseFloat(cm[1].replace(/[\s\u202f\u00a0.]/g, '').replace(',', '.')) : null;

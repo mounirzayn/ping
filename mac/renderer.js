@@ -203,6 +203,7 @@ function render(s) {
   if (!S.watches.length) { dot.className = 'dot'; txt.textContent = 'Aucune recherche'; }
   else if (!active.length) { dot.className = 'dot'; txt.textContent = 'En pause'; }
   else if (blocked) { dot.className = 'dot blocked'; txt.textContent = `${blocked} site(s) demandent une vérification`; }
+  else if (S.onBattery) { dot.className = 'dot ok'; txt.textContent = `Surveillance active · mode batterie (passages espacés) · ${active.length} site(s)`; }
   else if (S.ntfyBlocked) { dot.className = 'dot blocked'; txt.textContent = 'Surveillance active · envoi au téléphone en pause (limite du jour)'; }
   else { dot.className = 'dot ok'; txt.textContent = `Surveillance active · ${active.length} site(s)`; }
   const ub = $('#unreadBadge'); ub.hidden = !S.unread; ub.textContent = S.unread;
@@ -218,6 +219,7 @@ function render(s) {
   $('#tokenState').textContent = S.hasNtfyToken ? '✅ Abonnement actif : clé enregistrée. Laisse le champ vide et clique sur Enregistrer pour la retirer.' : 'Aucune clé : version gratuite.';
   $('#desktopNotif').checked = S.desktopNotif !== false;
   $('#soundOn').checked = S.soundOn !== false;
+  $('#ecoOn').checked = S.ecoBattery !== false;
   $('#ver').textContent = S.version || '';
   const u = S.update; $('#updBar').style.display = u ? 'flex' : 'none';
   if (u) {
@@ -243,6 +245,33 @@ $('#btnTest').onclick = () => { act('testPush'); toast('Alerte de test envoyée'
 $('#btnPause').onclick = () => act('pauseAll');
 $('#desktopNotif').onchange = (e) => act('setDesktop', e.target.checked);
 $('#soundOn').onchange = (e) => act('setSound', e.target.checked);
+// Pack Pépites : objets à forte plus-value à la revente, alertes seulement très sous la cote
+const PACK = [
+  ['PS5', 'ps5, playstation 5', 'consoles', ['lbc', 'vinted', 'fb']],
+  ['Xbox Series X', 'xbox series x, xbox serie x', 'consoles', ['lbc', 'vinted', 'fb']],
+  ['Switch OLED', 'switch oled', 'consoles', ['lbc', 'vinted']],
+  ['Steam Deck', 'steam deck', 'consoles', ['lbc', 'fb']],
+  ['Cartes graphiques RTX', 'rtx', 'informatique', ['lbc', 'fb', 'ebay']],
+  ['PC gamer', 'pc gamer, pc gaming', 'informatique', ['lbc', 'fb']],
+  ['MacBook', 'macbook', 'informatique', ['lbc', 'vinted']],
+  ['iPhone', 'iphone', 'telephones', ['lbc', 'vinted']],
+  ['Dyson', 'dyson', 'electromenager', ['lbc', 'vinted']],
+  ['Thermomix', 'thermomix', 'electromenager', ['lbc', 'fb']],
+  ['Lego', 'lego', 'jeux_jouets', ['lbc', 'vinted']],
+];
+$('#btnPack').onclick = async () => {
+  const have = new Set(S.watches.filter((w) => w.minDeal).map((w) => w.name));
+  let n = 0;
+  for (const [name, include, cat, sites] of PACK) {
+    if (have.has('💎 ' + name)) continue;
+    const base = { group: crypto.randomUUID(), city: '', name: '💎 ' + name, cat, min: '', max: '', include, exclude: 'cassé, pour pièces, à réparer, en panne', interval: 180, strict: true, minDeal: 30 };
+    const q1 = include.split(',')[0].trim();
+    await act('addWatches', sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, '', '', '') })));
+    n++;
+  }
+  toast(n ? `Pack Pépites ajouté : ${n} recherches 💎` : 'Le pack Pépites est déjà en place');
+};
+$('#ecoOn').onchange = (e) => act('setEco', e.target.checked);
 $('#btnSound').onclick = () => ding();
 $('#btnTopic').onclick = () => {
   const v = $('#topicEdit').value.trim().replace(/[^a-zA-Z0-9_-]/g, '');

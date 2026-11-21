@@ -1,5 +1,5 @@
 // Ping : appli Mac avec navigateur intégré. Surveille les recherches et notifie les nouvelles annonces.
-const { app, BrowserWindow, ipcMain, Notification, shell, Tray, Menu, nativeImage, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, shell, Tray, Menu, nativeImage, powerSaveBlocker, powerMonitor, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -77,7 +77,7 @@ function save() {
   broadcast();
   maybePushState();
 }
-const publicState = () => ({ ...state, ntfyToken: undefined, hasNtfyToken: !!state.ntfyToken, usage: usageNow(), ntfyBlocked: ntfyBlocked(), siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
+const publicState = () => ({ ...state, onBattery: onBattery(), ntfyToken: undefined, hasNtfyToken: !!state.ntfyToken, usage: usageNow(), ntfyBlocked: ntfyBlocked(), siteUrl: SITE, version: BUILD.tag || 'dev', cotes: groupCotes(), watches: state.watches.map(({ seen, cote, ...w }) => w) });
 function broadcast() {
   BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('state', publicState()); });
   updateBadge();
@@ -108,7 +108,11 @@ function pump() {
         console.error('[Ping]', e);
         if (id && String(e.message) === 'timeout') onCheckTimeout(id);
       })
-      .finally(() => { clearTimeout(to); running--; if (id) busy.delete(id); pump(); });
+      .finally(() => {
+        clearTimeout(to); running--; if (id) busy.delete(id);
+        const bw = id && workers.get(id); if (bw && !bw.isDestroyed()) bw.destroy(); if (id) workers.delete(id); // page fermée entre deux passages : mémoire libérée
+        pump();
+      });
   }
 }
 function onCheckTimeout(id) {
@@ -137,8 +141,10 @@ function schedule(id, delay) {
   clearTimeout(timers.get(id));
   timers.set(id, setTimeout(() => { timers.delete(id); enqueue(() => check(id), id); }, delay));
 }
+// Économie de batterie : sur batterie (sans chargeur), Ping espace ses passages (x3) pour tenir bien plus longtemps
+const onBattery = () => state.ecoBattery !== false && (() => { try { return powerMonitor.isOnBatteryPower(); } catch { return false; } })();
 function scheduleNext(w, factor = 1) {
-  const base = Math.max(MIN_INTERVAL, w.interval || 60) * factor;
+  const base = Math.max(MIN_INTERVAL, w.interval || 60) * factor * (onBattery() ? 3 : 1);
   schedule(w.id, base * (0.8 + Math.random() * 0.4) * 1000); // rythme irrégulier, plus humain
 }
 
@@ -233,12 +239,23 @@ function extractListings() {
   return { items: [...out.values()], blocked };
 }
 
+// Les pages de surveillance ne chargent ni photos, ni vidéos, ni polices (les liens des photos restent lisibles) :
+// beaucoup moins de processeur, de mémoire et de batterie. Ton navigateur intégré, lui, reste normal.
+const workerWc = new Set();
+function setupLightPages() {
+  try {
+    session.fromPartition(PART).webRequest.onBeforeRequest((d, cb) => {
+      cb({ cancel: workerWc.has(d.webContentsId) && ['image', 'media', 'font'].includes(d.resourceType) });
+    });
+  } catch (e) { console.error('[Ping] pages légères', e); }
+}
 function getWorker(id) {
   let bw = workers.get(id);
   if (bw && !bw.isDestroyed()) return bw;
   bw = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { partition: PART, backgroundThrottling: false } });
   bw.webContents.setAudioMuted(true);
   bw.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  const wcId = bw.webContents.id; workerWc.add(wcId); bw.on('closed', () => workerWc.delete(wcId));
   workers.set(id, bw);
   return bw;
 }
@@ -642,6 +659,7 @@ async function doAction(type, p, fromWeb = false) {
     case 'setTopic': if (!fromWeb) { state.ntfyTopic = p; save(); listenCmds(); pushState(); } break;
     case 'setDesktop': if (!fromWeb) { state.desktopNotif = !!p; save(); } break;
     case 'setSound': if (!fromWeb) { state.soundOn = !!p; save(); } break;
+    case 'setEco': if (!fromWeb) { state.ecoBattery = !!p; save(); scheduleAll(); } break;
     case 'ntfyLogin': { // crée une clé d'accès sur le compte ntfy (le mot de passe n'est jamais enregistré)
       if (fromWeb) break;
       const { user, pass } = p || {};
@@ -819,6 +837,8 @@ app.whenReady().then(() => {
   showMain();
   scheduleAll();
   listenCmds();
+  setupLightPages();
+  powerMonitor.on('on-battery', () => { pushState(); broadcast(); }); powerMonitor.on('on-ac', () => { scheduleAll(); broadcast(); });
   cleanOldHits(); setInterval(cleanOldHits, 5 * 60000);
   setTimeout(refreshUsage, 5000); setInterval(refreshUsage, 10 * 60000);
   setTimeout(pushState, 8000);

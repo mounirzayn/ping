@@ -30,6 +30,13 @@ jobs:
           npm install --no-audit --no-fund
           npx electron-builder --mac --arm64 --dir --publish never
           codesign --force --deep --sign - dist/mac-arm64/Ping.app
+      - name: Tester que Ping démarre sur Mac
+        working-directory: mac
+        run: |
+          dist/mac-arm64/Ping.app/Contents/MacOS/Ping --smoke & pid=$!
+          for i in $(seq 90); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+          kill -0 $pid 2>/dev/null && { kill $pid; echo "Ping ne répond pas"; exit 1; }
+          wait $pid; code=$?; cat "${TMPDIR:-/tmp}/ping-smoke.json" || true; exit $code
       - name: Préparer le zip
         run: |
           mkdir -p Ping-Mac
@@ -64,6 +71,14 @@ jobs:
           echo '{"tag":"${{ needs.version.outputs.tag }}"}' > build-info.json
           npm install --no-audit --no-fund
           npx electron-builder --win --x64 --publish never
+      - name: Tester que Ping démarre sur Windows
+        working-directory: mac
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist\win-unpacked\Ping.exe" -ArgumentList "--smoke" -PassThru
+          if (-not $p.WaitForExit(90000)) { $p.Kill(); throw "Ping ne répond pas" }
+          Get-Content "$env:TEMP\ping-smoke.json"
+          if ($p.ExitCode -ne 0) { throw "Ping a échoué au démarrage (code $($p.ExitCode))" }
       - uses: actions/upload-artifact@v4
         with: { name: windows, path: mac/dist/Ping-Windows-Setup.exe }
 

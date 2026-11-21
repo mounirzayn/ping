@@ -880,7 +880,8 @@ async function installUpdate() {
       const sh = `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done; rm -rf "${target}"; ditto "${newApp}" "${target}"; xattr -cr "${target}"; codesign --force --deep --sign - "${target}" >/dev/null 2>&1; open "${target}"`;
       spawn('/bin/sh', ['-c', sh], { detached: true, stdio: 'ignore' }).unref();
     } else {
-      spawn(file, [], { detached: true, stdio: 'ignore' }).unref(); // installeur Windows : installe puis relance Ping
+      // installeur Windows : attend la fermeture de Ping, installe en silence, puis relance Ping
+      spawn('cmd.exe', ['/c', `ping -n 4 127.0.0.1 >nul & "${file}" /S --force-run`], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
     }
     quitting = true;
     try { fs.writeFileSync(dataFile, JSON.stringify({ ...state, update: undefined })); } catch {}
@@ -981,12 +982,31 @@ function buildTray() {
   updateBadge();
 }
 
+// Test automatique (construction Windows/Mac) : l'interface se charge-t-elle sans erreur ?
+const SMOKE = process.argv.includes('--smoke');
+function smokeTest() {
+  const errs = [];
+  showMain();
+  mainWin.webContents.on('console-message', (...a) => { const e = a[0] && a[0].level !== undefined ? a[0] : { level: a[1], message: a[2] }; if (e.level === 3 || e.level === 'error') errs.push(e.message); });
+  setTimeout(async () => {
+    let ok = false;
+    try { ok = await mainWin.webContents.executeJavaScript(`!!document.querySelector('#feedSeg') && !!document.querySelector('#groups') && typeof window.ping === 'object'`); } catch (e) { errs.push(String(e)); }
+    try { const r = await mainWin.webContents.executeJavaScript(`(${extractListings.toString()})()`); if (!r || !Array.isArray(r.items)) errs.push('extraction'); } catch (e) { errs.push('extraction ' + e); }
+    const out = { ok: ok && !errs.length, errs, platform: process.platform };
+    console.log('SMOKE ' + JSON.stringify(out));
+    try { fs.writeFileSync(path.join(os.tmpdir(), 'ping-smoke.json'), JSON.stringify(out)); } catch {}
+    app.exit(out.ok ? 0 : 1);
+  }, 8000);
+}
 app.whenReady().then(() => {
   app.setName('Ping');
   load();
+  if (SMOKE) return smokeTest();
   powerSaveBlocker.start('prevent-app-suspension'); // garde la surveillance active
   buildTray();
-  showMain();
+  // Windows : Ping se lance tout seul à l'ouverture de session, discrètement près de l'horloge
+  if (process.platform === 'win32' && state.autoStart !== false) { try { app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] }); } catch {} }
+  if (!process.argv.includes('--hidden')) showMain();
   scheduleAll();
   listenCmds();
   setupLightPages();

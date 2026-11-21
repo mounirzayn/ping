@@ -35,7 +35,7 @@ main{max-width:1180px;margin:0 auto;padding:22px 24px 60px;display:block}
 .hit .m{color:var(--mut);font-size:12px}
 .hit .go{margin-top:8px;display:flex;gap:6px}
 .hit .go button{flex:1}
-.hit .fav{position:absolute;top:8px;right:42px;width:28px;height:28px;padding:0;border-radius:99px;background:rgba(0,0,0,.6);border:0;color:#ffd34d;font-size:16px;line-height:28px}.hit.isfav{border-color:#ffd34d}
+.hit .fav{position:absolute;top:8px;right:42px;width:28px;height:28px;padding:0;border-radius:99px;background:rgba(0,0,0,.6);border:0;color:#ffd34d;font-size:16px;line-height:28px}.hit.isfav{border-color:#ffd34d}.hit.ispep{border-color:#7fd4ff;box-shadow:0 0 0 1px #7fd4ff33}
 .hit .del{position:absolute;top:8px;right:8px;width:28px;height:28px;padding:0;border-radius:99px;background:rgba(0,0,0,.6);border:0;color:#fff;font-size:14px}
 .hit .del:hover{background:var(--bad);color:#fff}
 .edit{margin-top:12px;background:var(--card2);border-radius:10px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -80,6 +80,8 @@ code{background:#0b0d12;border:1px solid var(--line);padding:3px 8px;border-radi
 details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
 @media(max-width:900px){.cards,.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
 .usage{margin-top:12px}.usage-l{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}.usage-bar{height:8px;border-radius:99px;background:#1f2430;overflow:hidden}#usageFill{height:100%;width:0;background:var(--acc);transition:width .4s}#usageFill.warn{background:#ffb02e}#usageFill.full{background:#ff5c5c}
+.seg{display:inline-flex;background:#151924;border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}.seg button{border:0;background:transparent;color:var(--mut);padding:7px 12px;border-radius:9px;font-weight:700}.seg button.on{background:var(--acc);color:#04130a}.seg button[data-mode=pepites].on{background:#7fd4ff;color:#04121a}
+.sec{grid-column:1/-1;margin:6px 0 -4px;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.sec.pep{color:#7fd4ff;margin-top:18px}
 </style>
 </head>
 <body>
@@ -103,7 +105,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:12.5px}
   <section class="view on" id="v-feed">
     <div class="head">
       <div><h1>Nouvelles annonces</h1><p>Les plus récentes en premier. Chaque annonce s'efface toute seule au bout d'1 h, sauf celles que tu mets en favori ☆.</p></div>
-      <div style="display:flex;gap:8px"><button id="favToggle">★ Favoris</button><button id="btnClear">Tout marquer comme vu</button><button id="btnClearAll">Effacer toutes les annonces</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><div class="seg" id="feedSeg"><button data-mode="alertes" class="on">🔔 Alertes</button><button data-mode="pepites">💎 Pépites</button><button data-mode="favoris">★ Favoris</button></div><button id="btnClear">Tout marquer comme vu</button><button id="btnClearAll">Effacer toutes les annonces</button></div>
     </div>
     <div class="feed" id="feed"></div>
   </section>

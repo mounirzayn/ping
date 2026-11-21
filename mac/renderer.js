@@ -76,7 +76,8 @@ function coteBadge(price, cote, h = {}) {
 }
 
 // ---------- Annonces ----------
-let favOnly = false;
+let feedMode = 'alertes';
+const isPep = (h) => h.pepite || !!(S.watches.find((w) => w.id === h.watchId) || {}).minDeal;
 function renderFeed() {
   const el = $('#feed');
   if (!S.hits.length) {
@@ -84,12 +85,20 @@ function renderFeed() {
     el.innerHTML = `<div class="empty" style="grid-column:1/-1"><b>${any ? 'Aucune nouvelle annonce pour le moment' : 'Aucune recherche en cours'}</b>${any ? 'Ping a mémorisé les annonces déjà en ligne. Tu seras prévenu dès qu\'une nouvelle sort.' : 'Crée ta première recherche dans « + Nouvelle recherche ».'}</div>`;
     return;
   }
-  const list = favOnly ? S.hits.filter((h) => h.fav) : S.hits;
-  const nFav = S.hits.filter((h) => h.fav).length;
-  $('#favToggle').textContent = favOnly ? '← Toutes les annonces' : `★ Favoris (${nFav})`;
-  if (!list.length) { el.innerHTML = `<div class="empty" style="grid-column:1/-1"><b>Aucun favori</b>Clique sur l'étoile ☆ d'une annonce pour la garder : elle ne s'effacera pas au bout d'1 h.</div>`; return; }
-  el.innerHTML = list.slice(0, 200).map((h, i) => `
-    <div class="hit ${!favOnly && i < S.unread ? 'new' : ''} ${h.fav ? 'isfav' : ''}">
+  const unreadIds = new Set(S.hits.slice(0, S.unread).map((h) => h.id));
+  const by = { alertes: S.hits.filter((h) => !isPep(h)), pepites: S.hits.filter(isPep), favoris: S.hits.filter((h) => h.fav) };
+  const lbl = { alertes: '🔔 Alertes', pepites: '💎 Pépites', favoris: '★ Favoris' };
+  document.querySelectorAll('#feedSeg button').forEach((b) => {
+    const m = b.dataset.mode, nNew = by[m].filter((h) => unreadIds.has(h.id)).length;
+    b.textContent = `${lbl[m]} (${by[m].length})${m !== 'favoris' && nNew ? ' • ' + nNew + ' new' : ''}`; b.classList.toggle('on', m === feedMode);
+  });
+  const list = by[feedMode];
+  if (!list.length) {
+    const msg = { alertes: ['Aucune alerte pour le moment', 'Les annonces de tes recherches normales arrivent ici.'], pepites: ['Aucune pépite pour le moment', 'Les annonces au moins 30 % sous leur cote arrivent ici, après vérification de la description. Il en tombe moins, mais elles valent le coup.'], favoris: ['Aucun favori', 'Clique sur l’étoile ☆ d’une annonce pour la garder : elle ne s’effacera pas au bout d’1 h.'] }[feedMode];
+    el.innerHTML = `<div class="empty" style="grid-column:1/-1"><b>${msg[0]}</b>${msg[1]}</div>`; return;
+  }
+  el.innerHTML = list.slice(0, 200).map((h) => `
+    <div class="hit ${unreadIds.has(h.id) ? 'new' : ''} ${h.fav ? 'isfav' : ''} ${isPep(h) ? 'ispep' : ''}">
       <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : 'Pas de photo'}<span class="site s-${esc(h.site)}">${esc(h.site)}</span><button class="fav" data-fav="${esc(h.id)}" title="${h.fav ? 'Retirer des favoris' : 'Garder en favori (ne s’efface pas)'}">${h.fav ? '★' : '☆'}</button><button class="del" data-del="${esc(h.id)}" title="Supprimer cette annonce">✕</button></div>
       <div class="b">
         <div class="p">${eur(h.price)} ${coteBadge(h.price, coteOfHit(h), h)}</div>
@@ -121,7 +130,7 @@ function renderGroups() {
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(w);
   }
-  el.innerHTML = [...groups.values()].map((ws) => {
+  const card = (ws) => {
     const w0 = ws[0];
     const total = ws.reduce((n, w) => n + (w.count || 0), 0);
     const price = w0.min || w0.max ? ` · ${w0.min ? 'de ' + w0.min + ' €' : ''}${w0.min && w0.max ? ' ' : ''}${w0.max ? "jusqu'à " + w0.max + ' €' : ''}` : '';
@@ -157,7 +166,11 @@ function renderGroups() {
           </span>
         </div>`).join('')}</div>
     </div>`;
-  }).join('');
+  };
+  const all = [...groups.values()];
+  const normal = all.filter((ws) => !ws[0].minDeal), pep = all.filter((ws) => ws[0].minDeal);
+  el.innerHTML = `<h2 class="sec">🔔 Mes recherches (${normal.length})</h2>` + (normal.map(card).join('') || '<div class="empty" style="grid-column:1/-1">Aucune recherche normale. Crée-en une dans « + Nouvelle recherche ».</div>')
+    + (pep.length ? `<h2 class="sec pep">💎 Pack Pépites (${pep.length}) · alertes seulement à −30 % sous la cote</h2>` + pep.map(card).join('') : '');
 }
 let editing = false;
 $('#groups').onclick = async (e) => {
@@ -236,7 +249,7 @@ const webLink = () => (S.siteUrl || '') + 'app.html#' + S.ntfyTopic;
 $('#btnWeb').onclick = () => act('openExternal', webLink());
 $('#btnWebCopy').onclick = () => { navigator.clipboard.writeText(webLink()); toast('Lien copié'); };
 $('#btnClear').onclick = () => act('clearUnread');
-$('#favToggle').onclick = () => { favOnly = !favOnly; renderFeed(); };
+document.querySelectorAll('#feedSeg button').forEach((b) => (b.onclick = () => { feedMode = b.dataset.mode; renderFeed(); }));
 $('#btnClearAll').onclick = (e) => {
   const b = e.currentTarget;
   if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Confirmer : tout effacer ?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Effacer toutes les annonces'; }, 4000); return; }

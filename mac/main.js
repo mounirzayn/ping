@@ -530,7 +530,7 @@ async function check(id, manual = false) {
   w.primed = true; // premier passage : mémorise l'existant sans notifier
   w.count = (w.count || 0) + hits.length;
 
-  const stamped = hits.map((h) => { const c = coteForItem(w, h.title + (h.specs ? ' ' + h.specs.replace(/·/g, ' ') : '')); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, at: Date.now(), cote: c ? c.med : null, coteN: c ? c.n : 0, coteSrc: c ? c.src : null, fiable: c ? c.fiable : false, marge: marginOf(h.price, c) }; });
+  const stamped = hits.map((h) => { const c = coteForItem(w, h.title + (h.specs ? ' ' + h.specs.replace(/·/g, ' ') : '')); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, pepite: !!w.minDeal, at: Date.now(), cote: c ? c.med : null, coteN: c ? c.n : 0, coteSrc: c ? c.src : null, fiable: c ? c.fiable : false, marge: marginOf(h.price, c) }; });
   state.hits = keepFavs([...stamped, ...state.hits]);
   state.unread += stamped.length;
   save();
@@ -541,7 +541,7 @@ async function check(id, manual = false) {
   const overBudget = state.alertDay === today() && (state.alertCount || 0) >= budget;
   const solo = overBudget ? [] : stamped.slice(0, state.ntfyToken ? MAX_NOTIF_PER_CYCLE : 2); // abonnement : jusqu'à 6 alertes détaillées par passage
   solo.forEach((h) => notify({
-    title: `${h.cote && h.price != null && h.price <= h.cote * 0.75 ? '💎' : '🔔'} ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.name}`,
+    title: `${h.cote && h.price != null && h.price <= h.cote * 0.75 ? '💎' : '🔔'} ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.minDeal && !w.name.startsWith('💎') ? '💎 ' : ''}${w.name}`,
     message: `${h.title}\n${h.site}${h.specs ? ' · ' + h.specs : ''}${coteLine(h.price, h.cote, h)}`,
     url: h.url, img: h.img,
   }));

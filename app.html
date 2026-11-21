@@ -18,6 +18,7 @@ html,body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 -apple-s
 body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
 
 .refresh{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:999px;border:0;background:var(--acc);color:#04130a;font-weight:800;font-size:14px;cursor:pointer}.refresh .ico{display:inline-block;font-size:17px}.refresh.spin .ico{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.ubar{height:7px;border-radius:99px;background:#1f2430;overflow:hidden;margin-top:8px}.ubar div{height:100%}
+.seg{display:flex;background:#151924;border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px;margin:8px 0 12px}.seg button{flex:1;border:0;background:transparent;color:var(--mut);padding:8px 6px;border-radius:9px;font-weight:700;font-size:13px}.seg button.on{background:var(--acc);color:#04130a}.seg button[data-mode=pepites].on{background:#7fd4ff;color:#04121a}
 #secours{background:#2a1416;border:1px solid #ff5c5c;border-radius:14px;padding:12px;margin:0 0 14px}.sec-t{font-weight:800;color:#ff8080;margin-bottom:4px}.sec-m{font-size:13px;color:var(--mut);margin-bottom:8px}.sec-g{margin-top:8px;font-size:14px}.sec-l{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}.sec-a{padding:7px 11px;border-radius:999px;background:#161a23;border:1px solid var(--line);color:var(--txt);text-decoration:none;font-size:13px;font-weight:600}@media(hover:none){header,nav{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}header{background:#0b0d12}nav{background:#12151d}.hit.fresh{animation:none}}@media(max-width:430px){#syncTxt{display:none}}
 header{position:sticky;top:0;z-index:5;background:rgba(11,13,18,.9);backdrop-filter:blur(12px);padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
 .brand{display:flex;gap:9px;align-items:center;font-weight:800;font-size:20px;letter-spacing:-.4px}.brand img{width:28px;border-radius:7px}
@@ -90,7 +91,8 @@ a.link{color:var(--acc)}
 </header>
 <main>
   <div class="view on" id="v-feed">
-    <div style="display:flex;justify-content:space-between;align-items:center"><h2>Flux en direct</h2><div style="display:flex;gap:6px"><button class="b" id="favBtn" style="padding:5px 10px;font-size:12px">★</button><button class="b" id="clearFeed" style="padding:5px 10px;font-size:12px">Tout effacer</button></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:center"><h2>Flux en direct</h2><button class="b" id="clearFeed" style="padding:5px 10px;font-size:12px">Tout effacer</button></div>
+    <div class="seg" id="feedSeg"><button data-mode="alertes" class="on">🔔 Alertes</button><button data-mode="pepites">💎 Pépites</button><button data-mode="favoris">★ Favoris</button></div>
     <div id="feed"></div>
   </div>
 
@@ -189,6 +191,7 @@ function parseHit(m) {
   if (!m.title || !/^(🔔|💎)/.test(m.title) || /Test Ping|pendant la pause/.test(m.title)) return null; // 🔔 annonce, 💎 pépite
   const pm = m.title.match(/^(?:🔔|💎)\s*([\d\s  .,]+)\s*€/);
   const price = pm ? parseFloat(pm[1].replace(/[\s  .]/g, '').replace(',', '.')) : null;
+  const pepite = /·\s*💎/.test(m.title); // les recherches du pack Pépites commencent par 💎
   const watch = m.title.split('·').slice(pm ? 1 : 0).join('·').replace(/🔔|💎/g, '').trim();
   const [title, site, coteL] = (m.message || '').split('\n');
   const cm = (coteL || '').match(/Cote ~([\d\s\u202f\u00a0.,]+)\s*€/);
@@ -196,7 +199,7 @@ function parseHit(m) {
   const mm = (coteL || '').match(/marge ~([+-−]?[\d\s\u202f\u00a0.,]+)\s*€/);
   const marge = mm ? parseFloat(mm[1].replace(/[\s\u202f\u00a0.+]/g, '').replace('−', '-').replace(',', '.')) : null;
   const ventes = /ventes eBay/.test(coteL || '');
-  return { id: m.id, at: m.time * 1000, price, watch, title, site: site || '', url: m.click, img: m.attachment ? m.attachment.url : null, cote, marge, ventes };
+  return { id: m.id, at: m.time * 1000, price, watch, title, site: site || '', url: m.click, img: m.attachment ? m.attachment.url : null, cote, marge, ventes, pepite };
 }
 const etatParts = {};
 function handle(m, live) {
@@ -281,7 +284,7 @@ $('#feed').addEventListener('click', (e) => {
   renderFeed();
 });
 $('#clearFeed').onclick = () => { hits.forEach((h) => { if (!favs[h.id]) hidden.add(h.id); }); saveHidden(); renderFeed(); toast('Annonces effacées (favoris gardés)'); };
-$('#favBtn').onclick = () => { favOnly = !favOnly; cardEls.forEach((n) => n.remove()); cardEls.clear(); renderFeed(); };
+document.querySelectorAll('#feedSeg button').forEach((b) => (b.onclick = () => { feedMode = b.dataset.mode; cardEls.forEach((n) => n.remove()); cardEls.clear(); feedLimit = 40; renderFeed(); }));
 
 // ---------- Commandes vers le Mac ----------
 async function send(cmd, p) {
@@ -332,7 +335,7 @@ function coteBadge(price, cote) {
 }
 // Fil des annonces : on ne reconstruit jamais toute la liste (sinon les photos se rechargent et ça saccade).
 // Chaque carte est créée une fois, puis seulement déplacée ou mise à jour.
-const cardEls = new Map(); let feedLimit = 40, favOnly = false;
+const cardEls = new Map(); let feedLimit = 40, feedMode = 'alertes';
 // Favoris : gardés sur ce téléphone, jamais effacés. Le reste s'efface tout seul au bout d'1 h.
 const HIT_TTL = 60 * 60000;
 const favsGet = () => { try { return JSON.parse(store.get('pingFavs') || '{}'); } catch { return {}; } };
@@ -357,9 +360,15 @@ function renderFeed() {
   const now = Date.now();
   const merged = [...hits]; for (const f of Object.values(favs)) if (!merged.some((h) => h.id === f.id)) merged.push(f);
   merged.sort((a, b) => b.at - a.at);
-  const all = merged.filter((h) => !hidden.has(h.id) && (favs[h.id] || (!favOnly && now - h.at < HIT_TTL)));
-  const fb = $('#favBtn'); if (fb) fb.textContent = favOnly ? '← Tout' : `★ ${Object.keys(favs).length}`;
-  if (!all.length) { el.innerHTML = favOnly ? `<div class="empty">Aucun favori.<br><br>Appuie sur l’étoile ☆ d’une annonce pour la garder : elle ne s’effacera pas.</div>` : `<div class="empty">Aucune annonce dans la dernière heure.<br><br>Les annonces s’effacent au bout d’1 h, sauf tes favoris ☆.</div>`; cardEls.clear(); return; }
+  const live = merged.filter((h) => !hidden.has(h.id) && (favs[h.id] || now - h.at < HIT_TTL));
+  const by = { alertes: live.filter((h) => !h.pepite), pepites: live.filter((h) => h.pepite), favoris: live.filter((h) => favs[h.id]) };
+  const lbl = { alertes: '🔔 Alertes', pepites: '💎 Pépites', favoris: '★' };
+  document.querySelectorAll('#feedSeg button').forEach((b) => { b.textContent = `${lbl[b.dataset.mode]} ${by[b.dataset.mode].length}`; b.classList.toggle('on', b.dataset.mode === feedMode); });
+  const all = by[feedMode];
+  if (!all.length) {
+    el.innerHTML = `<div class="empty">${{ alertes: 'Aucune alerte dans la dernière heure.<br><br>Les annonces s’effacent au bout d’1 h, sauf tes favoris ☆.', pepites: 'Aucune pépite pour le moment.<br><br>Seules les annonces au moins 30 % sous leur cote, vérifiées, arrivent ici.', favoris: 'Aucun favori.<br><br>Appuie sur l’étoile ☆ d’une annonce pour la garder : elle ne s’effacera pas.' }[feedMode]}</div>`;
+    cardEls.clear(); return;
+  }
   const empty = el.querySelector('.empty'); if (empty) empty.remove();
   const shown = all.slice(0, feedLimit); const keep = new Set(shown.map((h) => h.id));
   for (const [id, node] of cardEls) if (!keep.has(id)) { node.remove(); cardEls.delete(id); }

@@ -75,6 +75,14 @@ function load() {
     });
     state.v9 = true;
   }
+  if (!state.v10) { // Pépites voitures : budget max 1 500 € (au lieu d'un minimum de 1 500 €)
+    state.watches.forEach((w) => {
+      if (!w.minDeal || w.cat !== 'voitures') return;
+      w.min = ''; w.max = '1500'; w.url = rewriteUrl(w.url, '', '', '1500');
+      w.seen = []; w.primed = false;
+    });
+    state.v10 = true;
+  }
   // À chaque démarrage : on repasse le flux au filtre actuel (les règles s'améliorent à chaque version)
   state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, h.cote ? { med: h.cote } : null)); });
   state.unread = Math.min(state.unread, state.hits.length);

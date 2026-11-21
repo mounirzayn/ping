@@ -283,7 +283,7 @@ $('#btnPack').onclick = async () => {
   let n = 0;
   for (const [name, include, cat, sites, opt = {}] of PACK) {
     if (have.has('💎 ' + name)) continue;
-    const base = { group: crypto.randomUUID(), city: '', name: '💎 ' + name, cat, min: cat === 'voitures' ? '1500' : '', max: '', include, exclude: 'cassé, pour pièces, à réparer, en panne', interval: 180, strict: true, minDeal: 30, ...opt };
+    const base = { group: crypto.randomUUID(), city: '', name: '💎 ' + name, cat, min: '', max: cat === 'voitures' ? '1500' : '', include, exclude: 'cassé, pour pièces, à réparer, en panne', interval: 180, strict: true, minDeal: 30, ...opt };
     const q1 = include.split(',')[0].trim();
     await act('addWatches', sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, '', '', '') })));
     n++;

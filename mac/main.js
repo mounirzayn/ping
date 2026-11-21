@@ -368,6 +368,54 @@ const marginOf = (price, c) => (c && price != null ? Math.round(c.med * 0.92 - p
 // au-delà de -55 % c'est presque toujours une arnaque, une pièce ou un objet en panne : écarté
 const dealOk = (w, it, c) => !w.minDeal || !!(c && c.fiable && it.price != null && it.price <= c.med * (1 - w.minDeal / 100) && it.price >= c.med * 0.45);
 
+// ---------- Vérification des Pépites : lecture de la description ----------
+// Le titre ne dit pas tout (RAM, carte graphique, défauts…). Pour chaque Pépite candidate, Ping ouvre l'annonce,
+// lit la description, ajoute les caractéristiques trouvées au titre, recalcule la cote et écarte les objets à problème.
+const SPEC_RX = [
+  /\b(?:rtx|gtx|rx)\s?-?\d{3,4}\s?(?:ti|super|xtx|xt)?\b/gi,
+  /\bi[3579][\s-]?\d{4,5}[a-z]{0,2}\b/gi,
+  /\bryzen\s?[3579]\s?\d{4}[a-z0-9]{0,3}\b/gi,
+  /\bm[1-4](?:\s?(?:pro|max|ultra))?\b/gi,
+  /\b(?:hd|uhd|iris)\s?graphics\s?\d{0,4}\b/gi,
+  /\b\d{1,3}\s?(?:go|gb|to|tb)\b/gi,
+];
+const DESC_BAD = /icloud|bloqu[ée]|verrouill|ne s'allume|ne s.allume plus|en panne|pour pi[eè]ces|hs\b|[ée]cran (?:cass|fissur)|fissur|ne fonctionne (?:pas|plus)|d[ée]fectueu|carte m[eè]re (?:hs|morte)|probl[eè]me (?:de|d')/i;
+const DESC_JS = `(() => {
+  const pick = (sel) => { const e = document.querySelector(sel); return e ? e.innerText : ''; };
+  const d = pick('[data-qa-id="adview_description_container"]') || pick('[itemprop="description"]') || pick('[data-testid="item-description"]')
+    || pick('#viTabs_0_is') || pick('.x-item-description') || pick('[class*="description" i]');
+  const meta = (document.querySelector('meta[property="og:description"]') || document.querySelector('meta[name="description"]') || {}).content || '';
+  const crit = [...document.querySelectorAll('[data-qa-id="criteria_container"] *, [data-testid*="details" i] *')].slice(0, 60).map((e) => e.innerText).join(' ');
+  return (d + ' ' + meta + ' ' + crit).slice(0, 6000);
+})()`;
+async function readDescription(url, key) {
+  let txt = '';
+  try {
+    const bw = getWorker(key);
+    await Promise.race([bw.loadURL(url).catch(() => {}), sleep(25000)]);
+    await sleep(1800 + Math.random() * 1200);
+    txt = String(await withTimeout(bw.webContents.executeJavaScript(DESC_JS).catch(() => ''), 10000, '') || '');
+  } catch {}
+  const bw = workers.get(key); if (bw && !bw.isDestroyed()) bw.destroy(); workers.delete(key);
+  return txt;
+}
+async function verifyPepites(w, hits) {
+  const ok = [];
+  for (const it of hits.slice(0, 4)) {
+    const desc = await readDescription(it.url, 'detail:' + w.id);
+    if (!desc) { ok.push(it); continue; } // page illisible : on garde l'estimation sur le titre
+    if (DESC_BAD.test(desc)) continue; // objet en panne, bloqué, pour pièces…
+    const specs = [...new Set(SPEC_RX.flatMap((rx) => desc.match(rx) || []).map((x) => x.trim().toLowerCase().replace(/(\d)\s+(go|gb|to|tb)\b/, '$1$2')))].slice(0, 6); // « 8 go » → « 8go » (capacité)
+    const c = coteForItem(w, it.title + ' ' + specs.join(' '));
+    if (!dealOk(w, it, c)) continue; // avec les vraies caractéristiques, ce n'est plus une affaire
+    it.specs = specs.join(' · ');
+    it.verified = true;
+    ok.push(it);
+    await sleep(1500);
+  }
+  return ok;
+}
+
 // Ventes terminées eBay pour un groupe de recherche (toutes les 12 h) : les vrais prix de revente
 const SOLD_EVERY = 12 * 3600 * 1000;
 async function checkSold(g) {
@@ -477,11 +525,12 @@ async function check(id, manual = false) {
   const fresh = result.items.filter((it) => !seen.has(it.id));
   result.items.forEach((it) => seen.add(it.id));
   w.seen = [...seen].slice(-MAX_SEEN);
-  const hits = w.primed ? fresh.filter((it) => { const c = coteForItem(w, it.title); return matches(w, it) && !belowCote(w, it, c) && dealOk(w, it, c); }) : [];
+  let hits = w.primed ? fresh.filter((it) => { const c = coteForItem(w, it.title); return matches(w, it) && !belowCote(w, it, c) && dealOk(w, it, c); }) : [];
+  if (w.minDeal && hits.length) hits = await verifyPepites(w, hits); // on lit la description avant d'alerter
   w.primed = true; // premier passage : mémorise l'existant sans notifier
   w.count = (w.count || 0) + hits.length;
 
-  const stamped = hits.map((h) => { const c = coteForItem(w, h.title); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, at: Date.now(), cote: c ? c.med : null, coteN: c ? c.n : 0, coteSrc: c ? c.src : null, fiable: c ? c.fiable : false, marge: marginOf(h.price, c) }; });
+  const stamped = hits.map((h) => { const c = coteForItem(w, h.title + (h.specs ? ' ' + h.specs.replace(/·/g, ' ') : '')); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, at: Date.now(), cote: c ? c.med : null, coteN: c ? c.n : 0, coteSrc: c ? c.src : null, fiable: c ? c.fiable : false, marge: marginOf(h.price, c) }; });
   state.hits = keepFavs([...stamped, ...state.hits]);
   state.unread += stamped.length;
   save();
@@ -493,7 +542,7 @@ async function check(id, manual = false) {
   const solo = overBudget ? [] : stamped.slice(0, state.ntfyToken ? MAX_NOTIF_PER_CYCLE : 2); // abonnement : jusqu'à 6 alertes détaillées par passage
   solo.forEach((h) => notify({
     title: `${h.cote && h.price != null && h.price <= h.cote * 0.75 ? '💎' : '🔔'} ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.name}`,
-    message: `${h.title}\n${h.site}${coteLine(h.price, h.cote, h)}`,
+    message: `${h.title}\n${h.site}${h.specs ? ' · ' + h.specs : ''}${coteLine(h.price, h.cote, h)}`,
     url: h.url, img: h.img,
   }));
   const rest = stamped.slice(solo.length);

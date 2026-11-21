@@ -119,8 +119,8 @@ a.link{color:var(--acc)}
       <div class="chips" id="siteChips"></div>
       <p class="muted" id="specHint" style="margin:-4px 0 12px"></p>
       <label style="border-top:1px solid var(--line);padding-top:12px">Ou le lien d'une recherche sur n'importe quel site<input id="fUrl" type="url" inputmode="url" placeholder="https://www.site-d-annonces.fr/recherche?..." autocapitalize="off"></label>
-      <button class="primary">Envoyer au Mac</button>
-      <p class="muted" style="margin-top:10px">Le ping est créé sur ton Mac, qui fait la surveillance avec tes connexions. Il apparaît dans « Mes pings » en quelques secondes.</p>
+      <button class="primary">Envoyer à l'ordinateur</button>
+      <p class="muted" style="margin-top:10px">Le ping est créé sur ton ordinateur (Mac ou PC), qui fait la surveillance avec tes connexions. Il apparaît dans « Mes pings » en quelques secondes.</p>
     </form>
   </div>
 
@@ -166,6 +166,7 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch { return 
 const ago = (t) => { if (!t) return 'jamais'; const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 60 ? `il y a ${s} s` : s < 3600 ? `il y a ${Math.round(s / 60)} min` : s < 86400 ? `il y a ${Math.round(s / 3600)} h` : `il y a ${Math.round(s / 86400)} j`; };
 function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2200); }
 
+let resyncAt = 0;
 let topic = null, hits = [], etat = null, es = null, freshIds = new Set();
 let hidden = new Set(); try { hidden = new Set(JSON.parse(localStorage.getItem('pingHidden') || '[]')); } catch {}
 const saveHidden = () => { try { localStorage.setItem('pingHidden', JSON.stringify([...hidden].slice(-2000))); } catch {} };
@@ -391,10 +392,26 @@ function renderFeed() {
   } else if (more) more.remove();
 }
 function tickAgo() { document.querySelectorAll('#feed .ago').forEach((n) => { n.textContent = ago(+n.dataset.at); }); }
-const STATUS = { ok: 'Actif', blocked: 'Vérification demandée : ouvre Ping sur le Mac', error: 'Erreur', empty: 'Aucune annonce lue', pending: 'Premier passage…' };
+const STATUS = { ok: 'Actif', blocked: 'Vérification demandée : ouvre Ping sur l\'ordinateur', error: 'Erreur', empty: 'Aucune annonce lue', pending: 'Premier passage…' };
 function renderPings() {
   const el = $('#pings');
-  if (!etat) { el.innerHTML = `<div class="empty">En attente de ton Mac…<br><br>Vérifie que l'appli Ping est ouverte, puis appuie sur « Resynchroniser » dans Réglages.</div>`; return; }
+  if (!etat) {
+    const waited = resyncAt && Date.now() - resyncAt > 20000;
+    el.innerHTML = `<div class="empty" style="text-align:left;line-height:1.55">
+      <b>${waited ? '⚠️ Ton ordinateur ne répond pas' : 'En attente de ton ordinateur…'}</b><br><br>
+      Les recherches tournent sur l'appli Ping de ton ordinateur (Mac ou PC). Cette page ne fait qu'afficher ce qu'il envoie.<br><br>
+      <b>1.</b> Installe Ping sur ton ordinateur :<br>
+      <a class="b" style="display:inline-block;margin:6px 6px 0 0" href="https://github.com/mounirzayn/ping/releases/latest/download/Ping-Mac.zip">Mac</a>
+      <a class="b" style="display:inline-block;margin:6px 0 0" href="https://github.com/mounirzayn/ping/releases/latest/download/Ping-Windows-Setup.exe">Windows</a><br><br>
+      <b>2.</b> Dans Ping sur l'ordinateur, Réglages &gt; Code d'accès : mets exactement ce code puis Enregistrer :<br>
+      <code style="user-select:all;display:inline-block;margin:6px 0;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.08)">${esc(topic || '')}</code><br><br>
+      <b>3.</b> Laisse Ping ouvert sur l'ordinateur, puis :<br>
+      <button class="b" id="resync2" style="margin-top:6px">Resynchroniser</button>
+      ${waited ? `<br><br>Si rien ne vient : Ping est fermé sur l'ordinateur, il n'est pas à jour (Réglages &gt; Rechercher une mise à jour), ou le code n'est pas le même des deux côtés.` : ''}
+    </div>`;
+    const r2 = $('#resync2'); if (r2) r2.onclick = doResync;
+    return;
+  }
   if (!etat.w.length) { el.innerHTML = `<div class="empty">Aucun ping. Crée ton premier dans « Nouveau ».</div>`; return; }
   let usage = '';
   if (etat.nu) {
@@ -420,7 +437,7 @@ $('#pings').onclick = async (e) => {
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const a = b.dataset.a;
   if (a === 'delete' && b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Confirmer ?'; return; }
-  if (await send(a, b.dataset.id)) toast(a === 'checkNow' ? 'Vérification lancée sur le Mac' : 'Envoyé au Mac');
+  if (await send(a, b.dataset.id)) toast(a === 'checkNow' ? 'Vérification lancée sur l\'ordinateur' : 'Envoyé à l\'ordinateur');
 };
 
 // ---------- Création ----------
@@ -450,7 +467,7 @@ $('#newForm').onsubmit = async (e) => {
   const host = (() => { try { return new URL(custom).hostname.replace(/^www\./, ''); } catch { return ''; } })();
   const list = custom ? [{ ...base, name: base.name || host, site: host, url: custom }] : sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, base.min, base.max, city) }));
   if (await send('addWatches', list)) {
-    toast('Ping envoyé au Mac');
+    toast('Ping envoyé à l\'ordinateur');
     ['#fName', '#fQuery', '#fMin', '#fMax', '#fExclude', '#fUrl', '#fCity'].forEach((s) => ($(s).value = ''));
     go('pings');
   }
@@ -520,8 +537,9 @@ function go(v) {
 }
 document.querySelectorAll('nav button').forEach((b) => (b.onclick = () => go(b.dataset.v)));
 $('#copyTopic').onclick = async () => { try { await navigator.clipboard.writeText(topic); toast('Canal copié'); } catch { toast(topic); } };
-$('#pauseAll').onclick = async () => { if (await send('pauseAll')) toast('Envoyé au Mac'); };
-$('#resync').onclick = async () => { if (await send('refresh')) toast('Synchro demandée'); };
+$('#pauseAll').onclick = async () => { if (await send('pauseAll')) toast('Envoyé à l\'ordinateur'); };
+async function doResync() { if (await send('refresh')) { toast('Synchro demandée'); resyncAt = Date.now(); setTimeout(renderPings, 21000); } }
+$('#resync').onclick = doResync;
 setInterval(() => { if (document.hidden) return; renderSync(); tickAgo(); renderFeed(); }, 30000); // l'heure + l'effacement au bout d'1 h // seulement l'heure, pas toute la liste
 
 boot();

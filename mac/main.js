@@ -325,7 +325,7 @@ function similarPrices(sample, title) {
   const items = sample.map((x) => ({ p: x.p, set: new Set(tokens(x.t)) }));
   const known = new Set(); items.forEach(({ set }) => set.forEach((k) => known.add(k)));
   // un chiffre jamais vu dans les autres annonces (« 3x » ventilateurs, référence vendeur) ne compte pas comme modèle
-  const models = T.filter((k) => isModel(k) && known.has(k)), mods = T.filter((k) => MODIFIERS.has(k));
+  var models = T.filter((k) => isModel(k) && known.has(k)); const mods = T.filter((k) => MODIFIERS.has(k));
   let out;
   if (models.length) {
     out = items.filter(({ set }) => models.every((k) => set.has(k))
@@ -338,9 +338,12 @@ function similarPrices(sample, title) {
     const N = items.length;
     const rare = T.filter((k) => df.has(k) && df.get(k) <= N * 0.5);
     if (!rare.length) return []; // titre trop vague (« ordinateur portable »)
+    var models = [];
     out = items.filter(({ set }) => rare.filter((k) => set.has(k)).length >= Math.ceil(rare.length * 0.6));
   }
-  return out.slice(0, 25).map((x) => x.p);
+  const res = out.slice(0, 25).map((x) => x.p);
+  res.precise = models.length > 0; // le titre donne un vrai modèle (3070, i5-7300hq, v15, 13 pro…)
+  return res;
 }
 const quantile = (a, q) => { const b = [...a].sort((x, y) => x - y); const i = (b.length - 1) * q; const lo = Math.floor(i); return b[lo] + (b[Math.ceil(i)] - b[lo]) * (i - lo); };
 // Cote d'une annonce. Priorité aux VENTES RÉELLES (ventes terminées eBay) : c'est le vrai prix de revente.
@@ -356,7 +359,8 @@ function coteForItem(w, title) {
   const m0 = median(prices), kept = prices.filter((x) => x >= m0 * 0.35 && x <= m0 * 2.5);
   const spread = (quantile(kept, 0.75) - quantile(kept, 0.25)) / c.med;
   const med = Math.round(src === 'ventes' ? c.med : c.med * 0.9);
-  return { med, n: c.n, src, fiable: c.n >= 6 && spread <= 0.5 };
+  // fiable = vrai modèle dans le titre + assez d'objets comparables + prix qui se tiennent
+  return { med, n: c.n, src, fiable: !!prices.precise && c.n >= 6 && spread <= 0.5 };
 }
 // Ce que tu peux espérer gagner : revente à la cote, moins ~8 % (négociation, frais), moins le prix d'achat
 const marginOf = (price, c) => (c && price != null ? Math.round(c.med * 0.92 - price) : null);

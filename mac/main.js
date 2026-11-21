@@ -317,7 +317,7 @@ const tokens = (t) => [...new Set(String(t || '').toLowerCase().normalize('NFD')
 // - la capacité (Go/To) n'est qu'un plus. Sans numéro de modèle, on compare sur les mots rares du titre.
 const MODIFIERS = new Set(['ti', 'super', 'pro', 'max', 'plus', 'mini', 'ultra', 'slim', 'oled', 'lite', 'digital', 'digitale', 'xl', 'xt', 'xtx', 'air', 'elite', 'fat']);
 const isCapacity = (k) => /^\d+(go|gb|to|tb|mo)$/.test(k);
-const isModel = (k) => /\d/.test(k) && !isCapacity(k) && !/^(19|20)\d\d$/.test(k) && k.length <= 10; // pas les années
+const isModel = (k) => /\d/.test(k) && !isCapacity(k) && k.length <= 10; // l'année compte aussi (MacBook 2013 ≠ 2020)
 function similarPrices(sample, title) {
   sample = sample.filter((x) => x.p > 1);
   if (sample.length < 4) return [];
@@ -361,7 +361,8 @@ function coteForItem(w, title) {
 // Ce que tu peux espérer gagner : revente à la cote, moins ~8 % (négociation, frais), moins le prix d'achat
 const marginOf = (price, c) => (c && price != null ? Math.round(c.med * 0.92 - price) : null);
 // Mode Pépites : seulement les annonces au moins X % sous leur cote, et seulement si la cote est fiable
-const dealOk = (w, it, c) => !w.minDeal || !!(c && c.fiable && it.price != null && it.price <= c.med * (1 - w.minDeal / 100));
+// au-delà de -55 % c'est presque toujours une arnaque, une pièce ou un objet en panne : écarté
+const dealOk = (w, it, c) => !w.minDeal || !!(c && c.fiable && it.price != null && it.price <= c.med * (1 - w.minDeal / 100) && it.price >= c.med * 0.45);
 
 // Ventes terminées eBay pour un groupe de recherche (toutes les 12 h) : les vrais prix de revente
 const SOLD_EVERY = 12 * 3600 * 1000;
@@ -520,7 +521,7 @@ function keywordsOf(w) {
   try { const u = new URL(w.url); return u.searchParams.get('text') || u.searchParams.get('query') || u.searchParams.get('search_text') || u.searchParams.get('_nkw') || ''; } catch { return ''; }
 }
 // Mode « uniquement l'objet » : écarte les accessoires / jeux vendus seuls (FR, EN, ES, IT)
-const ACC = new Set(['speicherplatz','portal','festplatte','disco','volante','lenkrad','thrustmaster','metalbox','blister','mannete','manete','manetta','speicherkarte','speicher','storage','expansion','seagate','ssd','memoire','caja','scatola','doos','karton','vacia','vuota','vide','leer','empty','box','emballage','carton','manette','manettes','controller','controllers','mando','mandos','controllo','dualsense','dualshock','coque','housse','funda','etui','case','cover','skin','skins','sticker','stickers','protection','chargeur','charger','cable','cables','support','socle','dock','casque','headset','volant','jeu','jeux','game','games','gioco','giochi','juego','juegos','boite','grip','grips','joystick','pochette','sacoche','ventilateur','telecommande','remote','camera','facade','plaque','piece','pieces','carte','disque','batterie','accessoire','accessoires','adaptateur','adapter','clavier','souris','keyboard','mouse','hub','cle','convertisseur','station','refroidisseur','cooler','stand','sac','valise','malette']);
+const ACC = new Set(['bouton','boutons','coque','coques','chargeur','vitre','pile','embout','embouts','brosse','filtre','tete','tuyau','accessoire','pieces','piece','carcasse','nappe','speicherplatz','portal','festplatte','disco','volante','lenkrad','thrustmaster','metalbox','blister','mannete','manete','manetta','speicherkarte','speicher','storage','expansion','seagate','ssd','memoire','caja','scatola','doos','karton','vacia','vuota','vide','leer','empty','box','emballage','carton','manette','manettes','controller','controllers','mando','mandos','controllo','dualsense','dualshock','coque','housse','funda','etui','case','cover','skin','skins','sticker','stickers','protection','chargeur','charger','cable','cables','support','socle','dock','casque','headset','volant','jeu','jeux','game','games','gioco','giochi','juego','juegos','boite','grip','grips','joystick','pochette','sacoche','ventilateur','telecommande','remote','camera','facade','plaque','piece','pieces','carte','disque','batterie','accessoire','accessoires','adaptateur','adapter','clavier','souris','keyboard','mouse','hub','cle','convertisseur','station','refroidisseur','cooler','stand','sac','valise','malette']);
 const words = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
 const NOT_SALE = new Set(['chercher','cherchons','cherch','recherchons','achat','acheter','procurando','procuro','busca','buscando','suchen','rechercher','recherchons','rachetons','recherche','recherches','cherche','cherchons','achete','achetons','achat','rachete','rachat','echange','echanges','troc','wanted','busco','cerco','suche','sucht','search','searching','looking','compro','scambio','cambio','tausch','nettoyage','reparation','depannage','location','loue']);
 // Jeux vendus seuls : mot "jeu" n'importe où, ou nom de jeu connu, sans indice de console
@@ -568,6 +569,8 @@ function matches(w, it) {
   const kwsAll = [...kwsRaw, ...(kwsRaw.some((k) => norm(k) === 'ps5') ? ['playstation 5', 'play 5', 'ps 5'] : []), ...(kwsRaw.some((k) => norm(k) === 'ps4') ? ['playstation 4', 'play 4'] : [])];
   if (w.strict && isAccessory(it.title, kwsAll)) return false;
   if (/\$\s?US|\bUSD\b|\bUS\$/i.test(it.title || '')) return false; // annonce à l'étranger (Marketplace)
+  // objet seul : on écarte aussi les objets en panne ou bloqués (iCloud, écran fissuré…), où qu'apparaisse le mot
+  if (w.strict && / (icloud|bloque|bloquee|verrouille|fissure|fissuree|casse|cassee|panne|hs|defectueux|defectueuse|pour pieces|a reparer) /.test(' ' + words(it.title).join(' ') + ' ')) return false;
   if (w.strict && it.price != null && it.price <= 1) return false; // prix symbolique (échange, recherche)
   // Prix plancher : une console (ou tout objet cherché) vendue à moins du quart du budget max, c'est presque toujours
   // un jeu, une boîte vide ou un accessoire. Ex. budget 300 € : on ignore ce qui est sous 75 €.

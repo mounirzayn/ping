@@ -9,7 +9,10 @@ const { spawn, execFile } = require('child_process');
 const os = require('os');
 let BUILD = {}; try { BUILD = require('./build-info.json'); } catch {}
 const NTFY = process.env.PING_NTFY || 'https://ntfy.sh/';
-const PART = 'persist:ping'; // session partagée : connexions conservées entre navigateur intégré et surveillance
+const PART = 'persist:ping';
+// Marketplace : Facebook n'affiche plus les résultats de recherche aux comptes connectés dans Ping (page vide).
+// La surveillance Marketplace passe donc par une session à part, non connectée, où la recherche fonctionne.
+const FB_PART = 'persist:ping-fb'; // session partagée : connexions conservées entre navigateur intégré et surveillance
 const MIN_INTERVAL = 30, MAX_SEEN = 600, MAX_HITS = 300, MAX_NOTIF_PER_CYCLE = 6;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -63,6 +66,14 @@ function load() {
       w.seen = []; w.primed = false;
     });
     state.v7 = true;
+  }
+  if (!state.v9) { // Marketplace : nouvelle session non connectée + voitures cherchées par mot-clé (la page Véhicules ignore la recherche)
+    state.watches.forEach((w) => {
+      if (w.site !== 'fb') return;
+      w.url = w.url.replace(/\/marketplace\/([a-z0-9-]+)\/vehicles\/?\?(?=.*query=)/, '/marketplace/$1/search/?');
+      w.seen = []; w.primed = false; w.status = ''; w.statusMsg = '';
+    });
+    state.v9 = true;
   }
   // À chaque démarrage : on repasse le flux au filtre actuel (les règles s'améliorent à chaque version)
   state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, h.cote ? { med: h.cote } : null)); });
@@ -244,17 +255,30 @@ function extractListings() {
 const workerWc = new Set();
 function setupLightPages() {
   try {
-    session.fromPartition(PART).webRequest.onBeforeRequest((d, cb) => {
+    for (const part of [PART, FB_PART]) session.fromPartition(part).webRequest.onBeforeRequest((d, cb) => {
       cb({ cancel: workerWc.has(d.webContentsId) && ['image', 'media', 'font'].includes(d.resourceType) });
     });
   } catch (e) { console.error('[Ping] pages légères', e); }
 }
-function getWorker(id) {
+const FB_DISMISS = `(() => { let n = 0;
+  for (const b of document.querySelectorAll('[role="button"],button')) {
+    const t = (b.innerText || b.getAttribute('aria-label') || '').trim();
+    if (/^(refuser les cookies optionnels|decline optional cookies|autoriser uniquement les cookies essentiels|only allow essential cookies)$/i.test(t)) { b.click(); n++; }
+  }
+  for (const d of document.querySelectorAll('[role="dialog"]')) { const c = d.querySelector('[aria-label="Fermer"],[aria-label="Close"]'); if (c) { c.click(); n++; } }
+  return n; })()`;
+function getWorker(id, url) {
+  const part = /facebook\.com/.test(url || '') ? FB_PART : PART;
   let bw = workers.get(id);
-  if (bw && !bw.isDestroyed()) return bw;
-  bw = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { partition: PART, backgroundThrottling: false } });
+  if (bw && !bw.isDestroyed() && bw._part === part) return bw;
+  if (bw && !bw.isDestroyed()) bw.destroy();
+  bw = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { partition: part, backgroundThrottling: false } });
+  bw._part = part;
   bw.webContents.setAudioMuted(true);
   bw.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  if (part === FB_PART) bw.webContents.on('did-finish-load', () => {
+    for (const t of [1200, 3000]) setTimeout(() => { if (!bw.isDestroyed()) bw.webContents.executeJavaScript(FB_DISMISS).catch(() => {}); }, t);
+  });
   const wcId = bw.webContents.id; workerWc.add(wcId); bw.on('closed', () => workerWc.delete(wcId));
   workers.set(id, bw);
   return bw;
@@ -391,7 +415,7 @@ const DESC_JS = `(() => {
 async function readDescription(url, key) {
   let txt = '';
   try {
-    const bw = getWorker(key);
+    const bw = getWorker(key, url);
     await Promise.race([bw.loadURL(url).catch(() => {}), sleep(25000)]);
     await sleep(1800 + Math.random() * 1200);
     txt = String(await withTimeout(bw.webContents.executeJavaScript(DESC_JS).catch(() => ''), 10000, '') || '');
@@ -426,7 +450,7 @@ async function checkSold(g) {
   const key = 'sold:' + g;
   let items = [];
   try {
-    const bw = getWorker(key);
+    const bw = getWorker(key, url);
     await Promise.race([bw.loadURL(url).catch(() => {}), sleep(30000)]);
     await sleep(2500 + Math.random() * 1500);
     for (const y of [900, 1800, 2700, 3600, 4500]) {
@@ -454,7 +478,7 @@ async function checkCote(id) {
   const key = 'cote:' + id;
   let items = [];
   try {
-    const bw = getWorker(key);
+    const bw = getWorker(key, url);
     await Promise.race([bw.loadURL(url).catch(() => {}), sleep(30000)]);
     await sleep(2500 + Math.random() * 1500);
     for (const y of [700, 1400, 2100, 2800]) {
@@ -482,7 +506,7 @@ async function check(id, manual = false) {
   if (!w || (!w.active && !manual)) return;
   let result = { items: [], blocked: false };
   try {
-    const bw = getWorker(id);
+    const bw = getWorker(id, w.url);
     await Promise.race([bw.loadURL(w.url).catch(() => {}), sleep(30000)]);
     await sleep(2500 + Math.random() * 1500);
     // petit défilement pour charger les vignettes paresseuses
@@ -500,7 +524,7 @@ async function check(id, manual = false) {
   if (!w) return;
   w.lastCheck = Date.now();
 
-  if (result.blocked) {
+  if (result.blocked && !result.items.length) {
     w.status = 'blocked';
     if (!w.blockedNotified) {
       notify({ title: '⚠️ Ping en pause : ' + w.name, message: 'Le site demande une vérification ou une connexion. Clique pour la faire dans Ping.', url: w.url, inApp: true });
@@ -520,7 +544,7 @@ async function check(id, manual = false) {
 
   w.status = 'ok'; w.statusMsg = ''; w.blockedNotified = false;
   if (!w.cote || Date.now() - w.cote.at > COTE_EVERY) enqueue(() => checkCote(w.id), 'cote:' + w.id);
-  { const g = w.group || w.id; const sd = (state.sold || {})[g]; if (!sd || Date.now() - sd.at > SOLD_EVERY) enqueue(() => checkSold(g), 'sold:' + g); }
+  if (w.cat !== 'voitures') { const g = w.group || w.id; const sd = (state.sold || {})[g]; if (!sd || Date.now() - sd.at > SOLD_EVERY) enqueue(() => checkSold(g), 'sold:' + g); }
   const seen = new Set(w.seen || []);
   const fresh = result.items.filter((it) => !seen.has(it.id));
   result.items.forEach((it) => seen.add(it.id));
@@ -543,13 +567,13 @@ async function check(id, manual = false) {
   solo.forEach((h) => notify({
     title: `${h.cote && h.price != null && h.price <= h.cote * 0.75 ? '💎' : '🔔'} ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.minDeal && !w.name.startsWith('💎') ? '💎 ' : ''}${w.name}`,
     message: `${h.title}\n${h.site}${h.specs ? ' · ' + h.specs : ''}${coteLine(h.price, h.cote, h)}`,
-    url: h.url, img: h.img,
+    url: h.url, img: h.img, pepite: !!w.minDeal,
   }));
   const rest = stamped.slice(solo.length);
   if (rest.length) notify({
     title: `🔔 ${rest.length} autre(s) annonce(s) · ${w.name}`,
     message: rest.slice(0, 4).map((h) => `${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : '?'} · ${h.title}`).join('\n'),
-    url: rest[0].url, img: rest[0].img,
+    url: rest[0].url, img: rest[0].img, pepite: !!w.minDeal,
   });
   if (w.active) scheduleNext(w);
 }
@@ -690,14 +714,15 @@ function ntfyPost(url, body, isAlert = false) {
 const ntfyBlocked = () => Date.now() < ntfyBlockedUntil;
 
 // ---------- Notifications : Mac + téléphone (ntfy) ----------
-function notify({ title, message, url, img, inApp }) {
+function notify({ title, message, url, img, inApp, pepite }) {
   if (state.desktopNotif !== false && Notification.isSupported()) {
     const n = new Notification({ title, body: message, silent: state.soundOn === false, sound: IS_MAC && state.soundOn !== false ? 'Glass' : undefined });
     n.on('click', () => { if (inApp) openBrowser(url); else if (/^https:\/\//.test(url)) shell.openExternal(url); });
     n.show();
   }
   if (state.ntfyTopic) {
-    const body = { topic: state.ntfyTopic, title, message, click: url, priority: 5, tags: ['bell'] };
+    // Pépites : priorité maximale (son + vibration longue + bandeau même en Ne pas déranger selon réglages). Alertes normales : haute.
+    const body = { topic: state.ntfyTopic, title, message, click: url, priority: pepite ? 5 : 4, tags: [pepite ? 'gem' : 'bell'] };
     if (img) body.attach = img;
     ntfyPost(NTFY, JSON.stringify(body), true);
   }

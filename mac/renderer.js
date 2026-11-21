@@ -261,6 +261,7 @@ $('#btnPause').onclick = () => act('pauseAll');
 $('#desktopNotif').onchange = (e) => act('setDesktop', e.target.checked);
 $('#soundOn').onchange = (e) => act('setSound', e.target.checked);
 // Pack Pépites : objets à forte plus-value à la revente, alertes seulement très sous la cote
+const CAR_EXCL = 'accidenté, accidentée, moteur hs, boîte hs, joint de culasse, pour pièces, épave, non roulant, sans ct, export, sans papiers, vendu en l état';
 const PACK = [
   ['PS5', 'ps5, playstation 5', 'consoles', ['lbc', 'vinted', 'fb']],
   ['Xbox Series X', 'xbox series x, xbox serie x', 'consoles', ['lbc', 'vinted', 'fb']],
@@ -273,13 +274,16 @@ const PACK = [
   ['Dyson', 'dyson', 'electromenager', ['lbc', 'vinted']],
   ['Thermomix', 'thermomix', 'electromenager', ['lbc', 'fb']],
   ['Lego', 'lego', 'jeux_jouets', ['lbc', 'vinted']],
+  // Voitures : marge visée 20 % (les prix auto bougent moins), pièges courants exclus
+  ...[['Clio', 'clio'], ['Peugeot 208', '208'], ['Golf', 'golf'], ['Polo', 'polo'], ['Yaris', 'yaris'], ['Twingo', 'twingo'], ['Citroën C3', 'c3'], ['Fiat 500', 'fiat 500']]
+    .map(([n, q]) => [n, q, 'voitures', ['lbc', 'fb'], { minDeal: 20, exclude: CAR_EXCL }]),
 ];
 $('#btnPack').onclick = async () => {
   const have = new Set(S.watches.filter((w) => w.minDeal).map((w) => w.name));
   let n = 0;
-  for (const [name, include, cat, sites] of PACK) {
+  for (const [name, include, cat, sites, opt = {}] of PACK) {
     if (have.has('💎 ' + name)) continue;
-    const base = { group: crypto.randomUUID(), city: '', name: '💎 ' + name, cat, min: '', max: '', include, exclude: 'cassé, pour pièces, à réparer, en panne', interval: 180, strict: true, minDeal: 30 };
+    const base = { group: crypto.randomUUID(), city: '', name: '💎 ' + name, cat, min: cat === 'voitures' ? '1500' : '', max: '', include, exclude: 'cassé, pour pièces, à réparer, en panne', interval: 180, strict: true, minDeal: 30, ...opt };
     const q1 = include.split(',')[0].trim();
     await act('addWatches', sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, '', '', '') })));
     n++;

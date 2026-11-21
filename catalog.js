@@ -80,7 +80,7 @@
       u.searchParams.set('sort', 'time'); u.searchParams.set('order', 'desc');
     } else if (site === 'fb') {
       // Ville dans le chemin : sinon Facebook prend la position du compte (parfois à l'étranger)
-      const path = g === 'vehicules' ? 'vehicles' : catKey === 'immo_location' || catKey === 'colocation' ? 'propertyrentals' : catKey === 'immo_vente' ? 'propertyforsale' : 'search/';
+      const path = g === 'vehicules' && !q ? 'vehicles' : catKey === 'immo_location' || catKey === 'colocation' ? 'propertyrentals' : catKey === 'immo_vente' ? 'propertyforsale' : 'search/';
       u = new URL('https://www.facebook.com/marketplace/paris/' + path);
       if (q || path === 'search/') u.searchParams.set('query', query);
       u.searchParams.set('sortBy', 'creation_time_descend');

@@ -83,6 +83,15 @@ function load() {
     });
     state.v10 = true;
   }
+  if (!state.v11) { // retirées à sa demande : toutes les recherches voitures et Xbox Series ; Pépites plus rapides (moins de sites à surveiller)
+    const gone = (w) => w.cat === 'voitures' || /xbox\s*s[eé]ries?/i.test((w.name || '') + ' ' + (w.include || ''));
+    const ids = new Set(state.watches.filter(gone).map((w) => w.id));
+    state.watches = state.watches.filter((w) => !ids.has(w.id));
+    state.hits = state.hits.filter((h) => !ids.has(h.watchId));
+    state.unread = Math.min(state.unread, state.hits.length);
+    state.watches.forEach((w) => { if (w.minDeal && w.interval === 180) w.interval = 120; });
+    state.v11 = true;
+  }
   // À chaque démarrage : on repasse le flux au filtre actuel (les règles s'améliorent à chaque version)
   state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, h.cote ? { med: h.cote } : null)); });
   state.unread = Math.min(state.unread, state.hits.length);
@@ -448,6 +457,22 @@ async function verifyPepites(w, hits) {
   return ok;
 }
 
+// Alertes normales sur l'électronique : on ouvre l'annonce (3 max par passage) pour écarter
+// les objets en panne / bloqués / pour pièces que le titre ne dit pas, et afficher la config (CPU, carte graphique, RAM…)
+const DETAIL_CATS = new Set(['informatique', 'consoles', 'telephones']);
+async function checkDetails(w, hits) {
+  const out = [];
+  hits.forEach((it, i) => { if (i >= 3) out.push(it); });
+  for (const it of hits.slice(0, 3)) {
+    const desc = await readDescription(it.url, 'detail:' + w.id);
+    if (desc && DESC_BAD.test(desc)) continue;
+    if (desc) { const specs = [...new Set(SPEC_RX.flatMap((rx) => desc.match(rx) || []).map((x) => x.trim().toLowerCase().replace(/(\d)\s+(go|gb|to|tb)\b/, '$1$2')))].slice(0, 6); if (specs.length) it.specs = specs.join(' · '); }
+    out.unshift(it);
+    await sleep(1200);
+  }
+  return out;
+}
+
 // Ventes terminées eBay pour un groupe de recherche (toutes les 12 h) : les vrais prix de revente
 const SOLD_EVERY = 12 * 3600 * 1000;
 async function checkSold(g) {
@@ -559,6 +584,7 @@ async function check(id, manual = false) {
   w.seen = [...seen].slice(-MAX_SEEN);
   let hits = w.primed ? fresh.filter((it) => { const c = coteForItem(w, it.title); return matches(w, it) && !belowCote(w, it, c) && dealOk(w, it, c); }) : [];
   if (w.minDeal && hits.length) hits = await verifyPepites(w, hits); // on lit la description avant d'alerter
+  else if (hits.length && DETAIL_CATS.has(w.cat)) hits = await checkDetails(w, hits); // PC, consoles, téléphones : on écarte les objets en panne et on récupère la config
   w.primed = true; // premier passage : mémorise l'existant sans notifier
   w.count = (w.count || 0) + hits.length;
 

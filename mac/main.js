@@ -356,6 +356,8 @@ const tokens = (t) => [...new Set(String(t || '').toLowerCase().normalize('NFD')
 // - le numéro de modèle doit être le même (3070 ≠ 3080, ps5 ≠ ps4, v15 ≠ v11, iPhone 13 ≠ 14)
 // - les variantes qui changent le prix doivent être identiques (Ti, Super, Pro, Max, Slim, OLED, Digital…)
 // - la capacité (Go/To) n'est qu'un plus. Sans numéro de modèle, on compare sur les mots rares du titre.
+const BUNDLE_RX = /\+|\b(lot|pack|bundle|avec|plus|et)\b.{0,25}\b(jeux?|manettes?|casques?|volant|accessoires|[eé]cran|clavier|souris)\b|\b\d+\s*(jeux|manettes)\b|\b(lot|pack|bundle)\b/i;
+const NEW_RX = /\b(neuf|neuve|new|brand new|scell[ée]e?|sealed|sous blister|jamais (servi|utilis[ée]e?|ouvert))\b/i;
 const MODIFIERS = new Set(['ti', 'super', 'pro', 'max', 'plus', 'mini', 'ultra', 'slim', 'oled', 'lite', 'digital', 'digitale', 'xl', 'xt', 'xtx', 'air', 'elite', 'fat']);
 const isCapacity = (k) => /^\d+(go|gb|to|tb|mo)$/.test(k);
 const isModel = (k) => /\d/.test(k) && !isCapacity(k) && k.length <= 10; // l'année compte aussi (MacBook 2013 ≠ 2020)
@@ -363,14 +365,27 @@ function similarPrices(sample, title) {
   sample = sample.filter((x) => x.p > 1);
   if (sample.length < 4) return [];
   const T = tokens(title);
+  // Un lot (console + manettes + jeux) ou un objet neuf sous blister se vend plus cher : on ne le compare
+  // qu'à d'autres lots / neufs, jamais à un objet seul d'occasion (sinon la cote gonfle et on voit des fausses Pépites)
+  const isBundle = (t) => BUNDLE_RX.test(t), isNew = (t) => NEW_RX.test(t);
+  const hb = isBundle(title), hn = isNew(title);
+  sample = sample.filter((x) => isBundle(x.t || '') === hb && (hn || !isNew(x.t || '')));
+  if (sample.length < 4) return [];
   const items = sample.map((x) => ({ p: x.p, set: new Set(tokens(x.t)) }));
   const known = new Set(); items.forEach(({ set }) => set.forEach((k) => known.add(k)));
   // un chiffre jamais vu dans les autres annonces (« 3x » ventilateurs, référence vendeur) ne compte pas comme modèle
   var models = T.filter((k) => isModel(k) && known.has(k)); const mods = T.filter((k) => MODIFIERS.has(k));
   let out;
+  let ambiguous = false;
   if (models.length) {
     out = items.filter(({ set }) => models.every((k) => set.has(k))
       && mods.every((k) => set.has(k)) && [...set].filter((k) => MODIFIERS.has(k)).every((k) => mods.includes(k)));
+    // Titre sans version (« PS5 » tout court) alors que le modèle existe en plusieurs versions (slim, digital, pro…) :
+    // on prend toutes les versions et la cote basse (la version la moins chère est la plus probable)
+    if (!mods.length) {
+      const fam = items.filter(({ set }) => models.every((k) => set.has(k)));
+      if (fam.length >= 6 && fam.filter(({ set }) => [...set].some((k) => MODIFIERS.has(k))).length >= fam.length * 0.3) { out = fam; ambiguous = true; }
+    }
     // la capacité départage quand il y a assez de choix
     const caps = T.filter(isCapacity);
     if (caps.length) { const same = out.filter(({ set }) => caps.every((k) => set.has(k))); if (same.length >= 4) out = same; }
@@ -384,6 +399,7 @@ function similarPrices(sample, title) {
   }
   const res = out.slice(0, 25).map((x) => x.p);
   res.precise = models.length > 0; // le titre donne un vrai modèle (3070, i5-7300hq, v15, 13 pro…)
+  res.ambiguous = ambiguous;
   return res;
 }
 const quantile = (a, q) => { const b = [...a].sort((x, y) => x - y); const i = (b.length - 1) * q; const lo = Math.floor(i); return b[lo] + (b[Math.ceil(i)] - b[lo]) * (i - lo); };
@@ -399,7 +415,9 @@ function coteForItem(w, title) {
   if (!c) return null;
   const m0 = median(prices), kept = prices.filter((x) => x >= m0 * 0.35 && x <= m0 * 2.5);
   const spread = (quantile(kept, 0.75) - quantile(kept, 0.25)) / c.med;
-  const med = Math.round(src === 'ventes' ? c.med : c.med * 0.9);
+  // Cote prudente : on vise le bas du marché (40 % des ventes en dessous), encore plus bas si la version est floue
+  const q = prices.ambiguous ? 0.25 : 0.4;
+  const med = Math.round(quantile(kept, q) * (src === 'ventes' ? 1 : 0.92));
   // fiable = vrai modèle dans le titre + assez d'objets comparables + prix qui se tiennent
   return { med, n: c.n, src, fiable: !!prices.precise && c.n >= 6 && spread <= 0.5 };
 }

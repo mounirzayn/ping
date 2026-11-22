@@ -261,6 +261,7 @@ $('#btnPause').onclick = () => act('pauseAll');
 $('#desktopNotif').onchange = (e) => act('setDesktop', e.target.checked);
 $('#soundOn').onchange = (e) => act('setSound', e.target.checked);
 // Pack Pépites : objets à forte plus-value à la revente, alertes seulement très sous la cote
+const WATCH_EXCL = 'cassé, pour pièces, à réparer, en panne, réplique, replica, copie, imitation, inspiré, homage, hommage, aaa, boîte seule, bracelet seul, cadran seul';
 const CAR_EXCL = 'accidenté, accidentée, moteur hs, boîte hs, joint de culasse, pour pièces, épave, non roulant, sans ct, export, sans papiers, vendu en l état';
 const PACK = [
   ['PS5', 'ps5, playstation 5', 'consoles', ['lbc', 'vinted', 'fb']],
@@ -273,13 +274,26 @@ const PACK = [
   ['Dyson', 'dyson', 'electromenager', ['lbc', 'vinted']],
   ['Thermomix', 'thermomix', 'electromenager', ['lbc', 'fb']],
   ['Lego', 'lego', 'jeux_jouets', ['lbc', 'vinted']],
+  // Montres : les copies sont écartées (titre et description), prix plancher sur le luxe
+  ['Apple Watch', 'apple watch', 'telephones', ['lbc', 'vinted']],
+  ['Garmin', 'garmin fenix, garmin forerunner, garmin epix', 'telephones', ['lbc', 'vinted']],
+  ['Tissot PRX', 'tissot prx', 'montres', ['lbc', 'vinted']],
+  ['TAG Heuer', 'tag heuer', 'montres', ['lbc', 'vinted'], { min: '300', exclude: WATCH_EXCL }],
+  ['Omega', 'omega speedmaster, omega seamaster', 'montres', ['lbc', 'vinted'], { min: '800', exclude: WATCH_EXCL }],
+  ['Rolex', 'rolex', 'montres', ['lbc', 'vinted'], { min: '2500', exclude: WATCH_EXCL }],
+  // Objets à forte valeur qui se revendent vite
+  ['iPad Pro', 'ipad pro', 'informatique', ['lbc', 'vinted']],
+  ['AirPods Max', 'airpods max', 'image_son', ['lbc', 'vinted']],
+  ['Appareil photo hybride', 'sony a7, canon eos r, fujifilm x-t', 'image_son', ['lbc', 'fb']],
+  ['Drone DJI', 'dji mini, dji air, dji mavic', 'image_son', ['lbc', 'fb']],
+  ['Switch 2', 'switch 2', 'consoles', ['lbc', 'vinted']],
 ];
 $('#btnPack').onclick = async () => {
   const have = new Set(S.watches.filter((w) => w.minDeal).map((w) => w.name));
   let n = 0;
   for (const [name, include, cat, sites, opt = {}] of PACK) {
     if (have.has('💎 ' + name)) continue;
-    const base = { group: crypto.randomUUID(), city: '', name: '💎 ' + name, cat, min: '', max: cat === 'voitures' ? '1500' : '', include, exclude: 'cassé, pour pièces, à réparer, en panne', interval: 120, strict: true, minDeal: 30, ...opt };
+    const base = { group: crypto.randomUUID(), city: '', name: '💎 ' + name, cat, min: '', max: cat === 'voitures' ? '1500' : '', include, exclude: cat === 'montres' ? WATCH_EXCL : 'cassé, pour pièces, à réparer, en panne', interval: 120, strict: true, minDeal: 30, ...opt };
     const q1 = include.split(',')[0].trim();
     await act('addWatches', sites.map((s) => ({ ...base, site: SITE_NAMES[s], url: buildUrl(s, q1, cat, '', '', '') })));
     n++;

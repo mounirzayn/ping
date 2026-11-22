@@ -438,7 +438,7 @@ const SPEC_RX = [
   /\b(?:hd|uhd|iris)\s?graphics\s?\d{0,4}\b/gi,
   /\b\d{1,3}\s?(?:go|gb|to|tb)\b/gi,
 ];
-const DESC_BAD = /icloud|bloqu[ée]|verrouill|ne s'allume|ne s.allume plus|en panne|pour pi[eè]ces|hs\b|[ée]cran (?:cass|fissur)|fissur|ne fonctionne (?:pas|plus)|d[ée]fectueu|carte m[eè]re (?:hs|morte)|probl[eè]me (?:de|d')/i;
+const DESC_BAD = /r[ée]plique|replica|imitation|contrefa[cç]on|\bhomage\b|\bhommage\b|\baaa\b|1:1|icloud|bloqu[ée]|verrouill|ne s'allume|ne s.allume plus|en panne|pour pi[eè]ces|hs\b|[ée]cran (?:cass|fissur)|fissur|ne fonctionne (?:pas|plus)|d[ée]fectueu|carte m[eè]re (?:hs|morte)|probl[eè]me (?:de|d')/i;
 const DESC_JS = `(() => {
   const pick = (sel) => { const e = document.querySelector(sel); return e ? e.innerText : ''; };
   const d = pick('[data-qa-id="adview_description_container"]') || pick('[itemprop="description"]') || pick('[data-testid="item-description"]')
@@ -477,7 +477,7 @@ async function verifyPepites(w, hits) {
 
 // Alertes normales sur l'électronique : on ouvre l'annonce (3 max par passage) pour écarter
 // les objets en panne / bloqués / pour pièces que le titre ne dit pas, et afficher la config (CPU, carte graphique, RAM…)
-const DETAIL_CATS = new Set(['informatique', 'consoles', 'telephones']);
+const DETAIL_CATS = new Set(['informatique', 'consoles', 'telephones', 'montres', 'image_son']);
 async function checkDetails(w, hits) {
   const out = [];
   hits.forEach((it, i) => { if (i >= 3) out.push(it); });

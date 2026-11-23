@@ -438,7 +438,8 @@ const SPEC_RX = [
   /\b(?:hd|uhd|iris)\s?graphics\s?\d{0,4}\b/gi,
   /\b\d{1,3}\s?(?:go|gb|to|tb)\b/gi,
 ];
-const DESC_BAD = /r[ée]plique|replica|imitation|contrefa[cç]on|\bhomage\b|\bhommage\b|\baaa\b|1:1|icloud|bloqu[ée]|verrouill|ne s'allume|ne s.allume plus|en panne|pour pi[eè]ces|hs\b|[ée]cran (?:cass|fissur)|fissur|ne fonctionne (?:pas|plus)|d[ée]fectueu|carte m[eè]re (?:hs|morte)|probl[eè]me (?:de|d')/i;
+const DESC_BAD_BASE = /r[ée]plique|replica|imitation|contrefa[cç]on|\bhomage\b|\bhommage\b|\baaa\b|1:1|icloud|bloqu[ée]|verrouill|ne s'allume|ne s.allume plus|en panne|pour pi[eè]ces|hs\b|[ée]cran (?:cass|fissur)|fissur|ne fonctionne (?:pas|plus)|d[ée]fectueu|carte m[eè]re (?:hs|morte)|probl[eè]me (?:de|d')/i;
+const DESC_BAD = { test: (t) => DESC_BAD_BASE.test(t) || PHOTO_SCAM.test(t) };
 const DESC_JS = `(() => {
   const pick = (sel) => { const e = document.querySelector(sel); return e ? e.innerText : ''; };
   const d = pick('[data-qa-id="adview_description_container"]') || pick('[itemprop="description"]') || pick('[data-testid="item-description"]')
@@ -688,7 +689,10 @@ function isAccessory(title, keywords) {
   const flat = ' ' + ws.join(' ') + ' ';
   return keywords.some((k) => { const kw = words(k).join(' '); return kw && new RegExp(` (pour|para|for|per|compatible) (la |el |le |the |une |un )?${kw} `).test(flat); });
 }
+// Arnaque « vendu en photo » : l'annonce montre une PS5 (ou autre) mais on n'achète qu'une photo de l'objet
+const PHOTO_SCAM = /\b(?:uniquement|seulement|juste|que|simplement)\s+(?:en\s+|une\s+|la\s+|le\s+)?(?:photo|image|impression|fichier)s?\b|\b(?:photo|image)s?\s+(?:uniquement|seulement|num[ée]rique|imprim[ée]e?|[àa]\s+imprimer|haute\s+r[ée]solution|hd)\b|\bvends?\s+(?:une\s+|la\s+)?(?:photo|image)\b|\bc.?est\s+(?:une|la|juste\s+une)\s+(?:photo|image)\b|\b(?:photo|image)s?\s+(?:de\s+|d.)(?:la\s+|une\s+|l.)?[a-z0-9]+(?:\s+[a-z0-9]+)?\s+(?:uniquement|seulement)\b|\bpas\s+(?:la|de)\s+(?:console|ps5|xbox|switch|vraie)\b|\bnft\b/i;
 function matches(w, it) {
+  if (PHOTO_SCAM.test(it.title || '')) return false;
   if (w.min !== '' && w.min != null && it.price != null && it.price < +w.min) return false;
   if (w.max !== '' && w.max != null && it.price != null && it.price > +w.max) return false;
   const t = norm(it.title);

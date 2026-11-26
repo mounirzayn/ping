@@ -459,7 +459,9 @@ const buyCost = (price, site) => (/vinted/i.test(site || '') ? price * 1.05 + 0.
 function verdictOf(price, c, site) {
   if (!c || price == null || c.src !== 'ref') return null;
   const marge = Math.round(c.med * 0.92 - buyCost(price, site));
-  if (price < c.med * 0.5) return { v: 'arnaque', marge, txt: `⚠️ TROP BAS pour un ${c.label} : arnaque probable (photo, bloqué, copie, faux vendeur). Ne paie jamais hors plateforme.` };
+  // Trop beau pour être vrai : les iPhone / Apple / montres très bas sont presque toujours bloqués ou des arnaques
+  const floor = /iphone|ipad|macbook|apple watch|airpods/i.test(c.label || '') ? 0.6 : 0.55;
+  if (price < c.med * floor) return { v: 'arnaque', marge, txt: `⚠️ TROP BAS pour un ${c.label} : arnaque probable (photo, bloqué, copie, faux vendeur). Ne paie jamais hors plateforme.` };
   if (price <= c.med * 0.72 && marge >= 50) return { v: 'top', marge, txt: `✅ BONNE AFFAIRE : ${c.label} revendu ~${c.med} €, marge ~+${marge} €${c.vague || c.estimate ? ' (vérifie la version / la config)' : ''}` };
   if (price <= c.med * 0.9 && marge > 0) return { v: 'ok', marge, txt: `🟡 Prix correct, petite marge (~+${marge} €)` };
   return { v: 'cher', marge, txt: `❌ Pas une affaire : au prix du marché (${c.label} ~${c.med} €) ou plus cher` };

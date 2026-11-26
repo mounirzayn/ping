@@ -454,18 +454,20 @@ function coteForItem(w, title) {
   return { med, n: live ? live.n : 0, src: 'ref', fiable: !ref.vague && !ref.estimate, label: ref.label, vague: !!ref.vague, estimate: !!ref.estimate };
 }
 // Verdict clair pour chaque annonce
-function verdictOf(price, c) {
+// Ce que l'achat coûte vraiment : sur Vinted, protection acheteur (~5 % + 0,70 €) et envoi (~5 €)
+const buyCost = (price, site) => (/vinted/i.test(site || '') ? price * 1.05 + 0.7 + 5 : price);
+function verdictOf(price, c, site) {
   if (!c || price == null || c.src !== 'ref') return null;
-  const marge = Math.round(c.med * 0.92 - price);
+  const marge = Math.round(c.med * 0.92 - buyCost(price, site));
   if (price < c.med * 0.5) return { v: 'arnaque', marge, txt: `⚠️ TROP BAS pour un ${c.label} : arnaque probable (photo, bloqué, copie, faux vendeur). Ne paie jamais hors plateforme.` };
-  if (price <= c.med * 0.75 && marge >= 40) return { v: 'top', marge, txt: `✅ BONNE AFFAIRE : ${c.label} revendu ~${c.med} €, marge ~+${marge} €${c.vague || c.estimate ? ' (vérifie la version / la config)' : ''}` };
+  if (price <= c.med * 0.72 && marge >= 50) return { v: 'top', marge, txt: `✅ BONNE AFFAIRE : ${c.label} revendu ~${c.med} €, marge ~+${marge} €${c.vague || c.estimate ? ' (vérifie la version / la config)' : ''}` };
   if (price <= c.med * 0.9 && marge > 0) return { v: 'ok', marge, txt: `🟡 Prix correct, petite marge (~+${marge} €)` };
   return { v: 'cher', marge, txt: `❌ Pas une affaire : au prix du marché (${c.label} ~${c.med} €) ou plus cher` };
 }
 const marginOf = (price, c) => (c && price != null ? Math.round(c.med * 0.92 - price) : null);
 // Mode Pépites : seulement les annonces au moins X % sous leur cote, et seulement si la cote est fiable
 // au-delà de -55 % c'est presque toujours une arnaque, une pièce ou un objet en panne : écarté
-const dealOk = (w, it, c) => { if (!w.minDeal) return true; const v = verdictOf(it.price, c); return !!(v && v.v === 'top' && !c.vague && it.price <= c.med * (1 - Math.min(w.minDeal, 25) / 100)); };
+const dealOk = (w, it, c) => { if (!w.minDeal) return true; const v = verdictOf(it.price, c, it.site); return !!(v && v.v === 'top' && !c.vague); };
 
 // ---------- Vérification des Pépites : lecture de la description ----------
 // Le titre ne dit pas tout (RAM, carte graphique, défauts…). Pour chaque Pépite candidate, Ping ouvre l'annonce,
@@ -656,7 +658,7 @@ async function check(id, manual = false) {
   w.primed = true; // premier passage : mémorise l'existant sans notifier
   w.count = (w.count || 0) + hits.length;
 
-  const stamped = hits.map((h) => { const c = coteForItem(w, h.title + (h.specs ? ' ' + h.specs.replace(/·/g, ' ') : '')); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, pepite: !!w.minDeal, at: Date.now(), verdict: (verdictOf(h.price, c) || {}).v || null, verdictTxt: (verdictOf(h.price, c) || {}).txt || '', refLabel: c && c.label || '', cote: c ? c.med : null, coteN: c ? c.n : 0, coteSrc: c ? c.src : null, fiable: c ? c.fiable : false, marge: marginOf(h.price, c) }; });
+  const stamped = hits.map((h) => { const c = coteForItem(w, h.title + (h.specs ? ' ' + h.specs.replace(/·/g, ' ') : '')); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, pepite: !!w.minDeal, at: Date.now(), verdict: (verdictOf(h.price, c, h.site) || {}).v || null, verdictTxt: (verdictOf(h.price, c, h.site) || {}).txt || '', refLabel: c && c.label || '', cote: c ? c.med : null, coteN: c ? c.n : 0, coteSrc: c ? c.src : null, fiable: c ? c.fiable : false, marge: c && h.price != null ? Math.round(c.med * 0.92 - buyCost(h.price, h.site)) : null }; });
   state.hits = keepFavs([...stamped, ...state.hits]);
   state.unread += stamped.length;
   save();

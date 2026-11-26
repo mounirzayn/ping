@@ -36,6 +36,7 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);m
 .hit{content-visibility:auto;contain-intrinsic-size:auto 106px;-webkit-tap-highlight-color:transparent}.more{display:block;width:100%;margin:6px 0 16px}
 html,body{overscroll-behavior-y:none}
 .hit .p{color:var(--acc);font-weight:800;font-size:18px}
+.sec{margin:14px 2px 6px;font-weight:800;font-size:14px;color:#e9ecf3}
 .verdict{margin:4px 0 2px;font-size:12px;font-weight:700;line-height:1.35;color:#c3c9d6}.verdict.good{color:#3dff8c}.verdict.mid{color:#e8d27a}.verdict.high{color:#ff9a4d}
 .cote{display:inline-block;margin-left:4px;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:middle}.cote.good{background:rgba(61,255,140,.15);color:#3dff8c}.cote.mid{background:rgba(139,147,167,.18);color:#c3c9d6}.cote.high{background:rgba(255,140,60,.15);color:#ff9a4d}
 .hit .t{font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -369,14 +370,29 @@ function renderFeed() {
   document.querySelectorAll('#feedSeg button').forEach((b) => { b.textContent = `${lbl[b.dataset.mode]} ${by[b.dataset.mode].length}`; b.classList.toggle('on', b.dataset.mode === feedMode); });
   const all = by[feedMode];
   if (!all.length) {
-    el.innerHTML = `<div class="empty">${{ alertes: 'Aucune alerte dans la dernière heure.<br><br>Les annonces s’effacent au bout d’1 h, sauf tes favoris ☆.', pepites: 'Aucune pépite pour le moment.<br><br>Seules les annonces au moins 30 % sous leur cote, vérifiées, arrivent ici.', favoris: 'Aucun favori.<br><br>Appuie sur l’étoile ☆ d’une annonce pour la garder : elle ne s’effacera pas.' }[feedMode]}</div>`;
+    el.innerHTML = `<div class="empty">${{ alertes: 'Aucune alerte dans la dernière heure.<br><br>Les annonces s’effacent au bout d’1 h, sauf tes favoris ☆.', pepites: 'Aucune pépite pour le moment.<br><br>Seules les vraies bonnes affaires arrivent ici : au moins 28 % sous la cote du modèle et 50 € de marge après frais.', favoris: 'Aucun favori.<br><br>Appuie sur l’étoile ☆ d’une annonce pour la garder : elle ne s’effacera pas.' }[feedMode]}</div>`;
     cardEls.clear(); return;
   }
   const empty = el.querySelector('.empty'); if (empty) empty.remove();
-  const shown = all.slice(0, feedLimit); const keep = new Set(shown.map((h) => h.id));
+  // Sections par verdict : bonnes affaires d'abord, meilleure marge en haut
+  const vk = (h) => /^✅/.test(h.verdict || '') ? 0 : /^🟡/.test(h.verdict || '') ? 1 : /^❌/.test(h.verdict || '') ? 2 : /^⚠️/.test(h.verdict || '') ? 3 : 4;
+  const SEC = ['✅ Bonnes affaires', '🟡 Prix corrects', '❌ Pas des affaires', '⚠️ Arnaques probables', '❔ Modèle non reconnu'];
+  const sorted = all.slice(0, feedLimit).sort((a, b) => vk(a) - vk(b) || (b.marge ?? -1e9) - (a.marge ?? -1e9) || b.at - a.at);
+  const counts = [0, 0, 0, 0, 0]; sorted.forEach((h) => counts[vk(h)]++);
+  const shown = []; let last = -1;
+  for (const h of sorted) { const k = vk(h); if (k !== last) { shown.push({ sec: k }); last = k; } shown.push(h); }
+  const keep = new Set(shown.map((h) => (h.sec != null ? 'sec' + h.sec : h.id)));
   for (const [id, node] of cardEls) if (!keep.has(id)) { node.remove(); cardEls.delete(id); }
   let prev = null;
   for (const h of shown) {
+    if (h.sec != null) {
+      let node = cardEls.get('sec' + h.sec);
+      if (!node) { node = document.createElement('div'); node.className = 'sec'; cardEls.set('sec' + h.sec, node); }
+      node.textContent = `${SEC[h.sec]} (${counts[h.sec]})`;
+      const want = prev ? prev.nextSibling : el.firstChild;
+      if (want !== node) el.insertBefore(node, want);
+      prev = node; continue;
+    }
     let node = cardEls.get(h.id);
     if (!node) {
       node = document.createElement('a'); node.className = 'hit'; node.href = h.url || '#'; node.target = '_blank'; node.rel = 'noopener';

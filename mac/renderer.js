@@ -97,21 +97,72 @@ function renderFeed() {
   });
   const list = by[feedMode];
   if (!list.length) {
-    const msg = { alertes: ['Aucune alerte pour le moment', 'Les annonces de tes recherches normales arrivent ici.'], pepites: ['Aucune pépite pour le moment', 'Les annonces au moins 30 % sous leur cote arrivent ici, après vérification de la description. Il en tombe moins, mais elles valent le coup.'], favoris: ['Aucun favori', 'Clique sur l’étoile ☆ d’une annonce pour la garder : elle ne s’effacera pas au bout d’1 h.'] }[feedMode];
+    const msg = { alertes: ['Aucune alerte pour le moment', 'Les annonces de tes recherches normales arrivent ici.'], pepites: ['Aucune pépite pour le moment', 'Les vraies bonnes affaires (au moins 28 % sous la cote du modèle, 50 € de marge après frais) arrivent ici, après vérification de la description. Il en tombe moins, mais elles valent le coup.'], favoris: ['Aucun favori', 'Clique sur l’étoile ☆ d’une annonce pour la garder : elle ne s’effacera pas au bout d’1 h.'] }[feedMode];
     el.innerHTML = `<div class="empty" style="grid-column:1/-1"><b>${msg[0]}</b>${msg[1]}</div>`; return;
   }
-  el.innerHTML = list.slice(0, 200).map((h) => `
+  // Sections par verdict, meilleure marge d'abord
+  const SECS = [
+    ['top', '✅ Bonnes affaires', 'Nettement sous la cote, marge réelle après frais.'],
+    ['ok', '🟡 Prix corrects', 'Un peu sous la cote : petite marge, à négocier.'],
+    ['cher', '❌ Pas des affaires', 'Au prix du marché ou au-dessus.'],
+    ['arnaque', '⚠️ Arnaques probables', 'Beaucoup trop bas pour être vrai : photo, bloqué, copie, faux vendeur.'],
+    ['', '❔ Modèle non reconnu', 'Ping n’a pas de cote sûre pour ce modèle : juge toi-même.'],
+  ];
+  const shown = list.slice(0, 200);
+  el.innerHTML = SECS.map(([v, title, sub]) => {
+    const items = shown.filter((h) => (h.verdict || '') === v).sort((a, b) => (b.marge ?? -1e9) - (a.marge ?? -1e9) || b.at - a.at);
+    if (!items.length) return '';
+    return `<div class="sec" style="grid-column:1/-1"><b>${title} <span>(${items.length})</span></b><small>${sub}</small></div>` + items.map((h) => card(h, unreadIds)).join('');
+  }).join('');
+}
+const CHECKS = {
+  telephones: ['Demande une photo de Réglages > Général > Informations (modèle, stockage)', 'État de la batterie (Réglages > Batterie) : 85 % ou plus', 'Compte iCloud / Google déconnecté devant toi, sinon le téléphone est bloqué', 'Facture ou boîte avec le même numéro IMEI'],
+  consoles: ['Teste-la allumée : jeu lancé, manette connectée, lecteur si version disque', 'Numéro de série sous la console identique à la boîte', 'Pas de bannissement : connecte-toi au réseau (PSN, Nintendo, Steam)'],
+  informatique: ['Fais-la démarrer devant toi : Windows ou macOS activé', 'Vérifie la config (Gestionnaire des tâches > Performances, ou À propos de ce Mac)', 'MacBook : plus de compte iCloud ni de verrouillage (Localiser désactivé)', 'PC : lance un jeu ou un test 5 minutes pour la carte graphique'],
+  montres: ['Numéro de série et papiers / facture', 'Apple Watch : plus jumelée au compte du vendeur (verrou d’activation)', 'Méfie-toi des copies : compare avec les photos officielles'],
+  image_son: ['Compteur de déclenchements (appareil photo)', 'Drone : plus lié au compte DJI du vendeur, batterie qui tient', 'AirPods Max : numéro de série vérifié sur le site Apple'],
+  electromenager: ['Fais-le tourner devant toi', 'Accessoires et chargeur d’origine inclus', 'Facture pour la garantie'],
+};
+function infoPanel(h) {
+  const c = coteOfHit(h);
+  const vinted = /vinted/i.test(h.site || '');
+  const cost = h.price != null ? Math.round(vinted ? h.price * 1.05 + 5.7 : h.price) : null;
+  const d = c && h.price != null ? Math.round(((h.price - c) / c) * 100) : null;
+  const rows = [
+    ['Modèle reconnu', h.refLabel || 'non reconnu'],
+    ['Prix demandé', eur(h.price)],
+    vinted ? ['Coût réel (protection + envoi Vinted)', eur(cost)] : null,
+    c ? ['Revente estimée (rapide)', `${eur(c)}${h.coteSrc === 'ref' ? ' · cote de référence' : ' · indicatif'}`] : null,
+    d != null ? ['Écart avec la cote', `${d > 0 ? '+' : ''}${d} %`] : null,
+    h.marge != null ? ['Marge nette (après ~8 % de négociation)', `${h.marge > 0 ? '+' : ''}${eur(h.marge)}`] : null,
+    h.specs ? ['Caractéristiques lues', h.specs] : null,
+    ['Site · recherche', `${h.site} · ${h.watchName}`],
+    ['Publiée', ago(h.at)],
+  ].filter(Boolean);
+  const advice = h.verdict === 'top' ? 'Fonce vite, mais vérifie les points ci-dessous avant de payer.' : h.verdict === 'ok' ? 'Négocie 10 à 15 % pour que ça vaille le coup.' : h.verdict === 'cher' ? 'Passe ton tour, ou négocie fort.' : h.verdict === 'arnaque' ? 'N’envoie pas d’argent. Paie seulement via la plateforme ou en main propre après avoir vu l’objet.' : 'Compare toi-même avec les ventes terminées eBay.';
+  const checks = CHECKS[h.cat] || ['Vois l’objet en vrai ou paie via la plateforme (protection acheteur)', 'Demande une photo avec ton prénom écrit à côté'];
+  return `<div class="infos">${rows.map(([k, v]) => `<div class="ir"><span>${esc(k)}</span><b>${esc(String(v))}</b></div>`).join('')}
+    <div class="iadv">${esc(advice)}</div>
+    <div class="ich"><b>À vérifier avant d’acheter</b>${checks.map((x) => `<div>• ${esc(x)}</div>`).join('')}<div>• Ne paie jamais par virement, PayPal « entre proches » ou carte cadeau</div></div></div>`;
+}
+const openInfo = new Set();
+function card(h, unreadIds) {
+  return `
     <div class="hit ${unreadIds.has(h.id) ? 'new' : ''} ${h.fav ? 'isfav' : ''} ${isPep(h) ? 'ispep' : ''}">
       <div class="img" ${h.img ? `style="background-image:url('${esc(h.img)}')"` : ''}>${h.img ? '' : 'Pas de photo'}<span class="site s-${esc(h.site)}">${esc(h.site)}</span><button class="fav" data-fav="${esc(h.id)}" title="${h.fav ? 'Retirer des favoris' : 'Garder en favori (ne s’efface pas)'}">${h.fav ? '★' : '☆'}</button><button class="del" data-del="${esc(h.id)}" title="Supprimer cette annonce">✕</button></div>
       <div class="b">
         <div class="p">${eur(h.price)} ${coteBadge(h.price, coteOfHit(h), h)}</div>
         <div class="t">${esc(h.title)}</div>
         <div class="m">${esc(h.watchName)} · ${ago(h.at)}${h.fav ? ' · gardée' : ` · s’efface dans ${Math.max(1, Math.round((h.at + 3600000 - Date.now()) / 60000))} min`}</div>
-        <div class="go"><button data-ext="${esc(h.url)}">Voir l'annonce ↗</button></div>
+        ${openInfo.has(h.id) ? infoPanel(h) : ''}
+        <div class="go"><button class="ib" data-info="${esc(h.id)}">${openInfo.has(h.id) ? 'Masquer les infos' : 'ℹ️ Infos'}</button><button data-ext="${esc(h.url)}">Voir l'annonce ↗</button></div>
       </div>
-    </div>`).join('');
+    </div>`;
 }
 $('#feed').onclick = (e) => {
+  const i = e.target.closest('[data-info]');
+  if (i) { e.stopPropagation(); const id = i.dataset.info; openInfo.has(id) ? openInfo.delete(id) : openInfo.add(id); renderFeed(); return; }
+  if (e.target.closest('.infos')) return;
   const f = e.target.closest('[data-fav]');
   if (f) { e.stopPropagation(); act('toggleFav', f.dataset.fav); return; }
   const d = e.target.closest('[data-del]');

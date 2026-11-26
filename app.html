@@ -36,6 +36,7 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);m
 .hit{content-visibility:auto;contain-intrinsic-size:auto 106px;-webkit-tap-highlight-color:transparent}.more{display:block;width:100%;margin:6px 0 16px}
 html,body{overscroll-behavior-y:none}
 .hit .p{color:var(--acc);font-weight:800;font-size:18px}
+.verdict{margin:4px 0 2px;font-size:12px;font-weight:700;line-height:1.35;color:#c3c9d6}.verdict.good{color:#3dff8c}.verdict.mid{color:#e8d27a}.verdict.high{color:#ff9a4d}
 .cote{display:inline-block;margin-left:4px;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:middle}.cote.good{background:rgba(61,255,140,.15);color:#3dff8c}.cote.mid{background:rgba(139,147,167,.18);color:#c3c9d6}.cote.high{background:rgba(255,140,60,.15);color:#ff9a4d}
 .hit .t{font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hit .m{color:var(--mut);font-size:12px;margin-top:3px}
@@ -189,18 +190,18 @@ $('#logout').onclick = () => { store.del('pingTopic'); if (es) es.close(); locat
 
 // ---------- Lecture du canal (ntfy) ----------
 function parseHit(m) {
-  if (!m.title || !/^(🔔|💎)/.test(m.title) || /Test Ping|pendant la pause/.test(m.title)) return null; // 🔔 annonce, 💎 pépite
-  const pm = m.title.match(/^(?:🔔|💎)\s*([\d\s  .,]+)\s*€/);
+  if (!m.title || !/^(🔔|💎|⚠️)/.test(m.title) || /Test Ping|pendant la pause/.test(m.title)) return null; // 🔔 annonce, 💎 pépite
+  const pm = m.title.match(/^(?:🔔|💎|⚠️)\s*([\d\s  .,]+)\s*€/);
   const price = pm ? parseFloat(pm[1].replace(/[\s  .]/g, '').replace(',', '.')) : null;
   const pepite = /·\s*💎/.test(m.title); // les recherches du pack Pépites commencent par 💎
-  const watch = m.title.split('·').slice(pm ? 1 : 0).join('·').replace(/🔔|💎/g, '').trim();
-  const [title, site, coteL] = (m.message || '').split('\n');
+  const watch = m.title.split('·').slice(pm ? 1 : 0).join('·').replace(/🔔|💎|⚠️/g, '').trim();
+  const [title, site, coteL, verdictL] = (m.message || '').split('\n');
   const cm = (coteL || '').match(/Cote ~([\d\s\u202f\u00a0.,]+)\s*€/);
   const cote = cm ? parseFloat(cm[1].replace(/[\s\u202f\u00a0.]/g, '').replace(',', '.')) : null;
   const mm = (coteL || '').match(/marge ~([+-−]?[\d\s\u202f\u00a0.,]+)\s*€/);
   const marge = mm ? parseFloat(mm[1].replace(/[\s\u202f\u00a0.+]/g, '').replace('−', '-').replace(',', '.')) : null;
   const ventes = /ventes eBay/.test(coteL || '');
-  return { id: m.id, at: m.time * 1000, price, watch, title, site: site || '', url: m.click, img: m.attachment ? m.attachment.url : null, cote, marge, ventes, pepite };
+  return { id: m.id, at: m.time * 1000, price, watch, title, site: site || '', url: m.click, img: m.attachment ? m.attachment.url : null, cote, marge, ventes, pepite, verdict: verdictL || '', vclass: /^✅/.test(verdictL || '') ? 'good' : /^🟡/.test(verdictL || '') ? 'mid' : /^(❌|⚠️)/.test(verdictL || '') ? 'high' : '' };
 }
 const etatParts = {};
 function handle(m, live) {
@@ -351,8 +352,9 @@ function cardHtml(h) {
       <button class="x" data-hide="${esc(h.id)}" aria-label="Supprimer">✕</button>
       <button class="star ${favs[h.id] ? 'on' : ''}" data-fav="${esc(h.id)}" aria-label="Favori">${favs[h.id] ? '★' : '☆'}</button>
       <div style="min-width:0">
-        <div class="p">${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : 'Prix ?'} ${coteBadge(h.price, h.cote)}${h.marge != null ? `<span class="cote ${h.marge > 0 ? 'good' : 'high'}">marge ~${h.marge > 0 ? '+' : ''}${h.marge.toLocaleString('fr-FR')} €${h.ventes ? ' ✓' : ''}</span>` : ''}</div>
+        <div class="p">${h.price != null ? h.price.toLocaleString('fr-FR') + ' €' : 'Prix ?'} ${coteBadge(h.price, h.cote)}${h.marge != null && /good|mid/.test(h.vclass || 'good') ? `<span class="cote ${h.marge > 0 ? 'good' : 'high'}">marge ~${h.marge > 0 ? '+' : ''}${h.marge.toLocaleString('fr-FR')} €${h.ventes ? ' ✓' : ''}</span>` : ''}</div>
         <div class="t">${esc(h.title)}</div>
+        ${h.verdict ? `<div class="verdict ${h.vclass}">${esc(h.verdict)}</div>` : ''}
         <div class="m">${esc(h.site)} · ${esc(h.watch)} · <span class="ago" data-at="${h.at}">${ago(h.at)}</span></div>
       </div>`;
 }

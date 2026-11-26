@@ -70,9 +70,12 @@ function coteBadge(price, cote, h = {}) {
   if (!cote || price == null) return '';
   const d = Math.round(((price - cote) / cote) * 100);
   const cls = d <= -10 ? 'good' : d >= 10 ? 'high' : 'mid';
-  const src = h.coteSrc === 'ventes' ? `d'après ${h.coteN} ventes réelles eBay` : `d'après ${h.coteN || 'quelques'} annonces en ligne (prix demandés -10 %)`;
+  const src = h.coteSrc === 'ref' ? `de référence pour ${h.refLabel || 'ce modèle'} (prix de revente rapide)` : h.coteSrc === 'ventes' ? `d'après ${h.coteN} ventes réelles eBay` : `d'après ${h.coteN || 'quelques'} annonces en ligne (prix demandés -10 %)`;
   const marge = h.marge != null ? `<span class="cote ${h.marge > 0 ? 'good' : 'high'}" title="Revente à la cote, moins ~8 % de négociation et frais">marge ~${h.marge > 0 ? '+' : ''}${eur(h.marge)}</span>` : '';
-  return `<span class="cote ${cls}" title="Cote ${src}${h.fiable ? '' : ' · peu d’annonces semblables : à vérifier'}">cote ~${eur(cote)} · ${d > 0 ? '+' : ''}${d} %${h.fiable ? '' : ' ?'}</span>${marge}`;
+  const known = h.coteSrc === 'ref' || h.fiable;
+  const vcls = { top: 'good', ok: 'mid', cher: 'high', arnaque: 'high' }[h.verdict] || '';
+  const verdict = h.verdictTxt ? `<div class="verdict ${vcls}">${esc(h.verdictTxt)}</div>` : (!known ? `<div class="verdict">Modèle non reconnu : cote indicative, vérifie toi-même</div>` : '');
+  return `<span class="cote ${cls}" title="Cote ${src}">cote ~${eur(cote)} · ${d > 0 ? '+' : ''}${d} %${known ? '' : ' ?'}</span>${h.verdict === 'top' || h.verdict === 'ok' ? marge : ''}${verdict}`;
 }
 
 // ---------- Annonces ----------
@@ -273,14 +276,10 @@ const PACK = [
   ['iPhone', 'iphone', 'telephones', ['lbc', 'vinted']],
   ['Dyson', 'dyson', 'electromenager', ['lbc', 'vinted']],
   ['Thermomix', 'thermomix', 'electromenager', ['lbc', 'fb']],
-  ['Lego', 'lego', 'jeux_jouets', ['lbc', 'vinted']],
   // Montres : les copies sont écartées (titre et description), prix plancher sur le luxe
   ['Apple Watch', 'apple watch', 'telephones', ['lbc', 'vinted']],
   ['Garmin', 'garmin fenix, garmin forerunner, garmin epix', 'telephones', ['lbc', 'vinted']],
   ['Tissot PRX', 'tissot prx', 'montres', ['lbc', 'vinted']],
-  ['TAG Heuer', 'tag heuer', 'montres', ['lbc', 'vinted'], { min: '300', exclude: WATCH_EXCL }],
-  ['Omega', 'omega speedmaster, omega seamaster', 'montres', ['lbc', 'vinted'], { min: '800', exclude: WATCH_EXCL }],
-  ['Rolex', 'rolex', 'montres', ['lbc', 'vinted'], { min: '2500', exclude: WATCH_EXCL }],
   // Objets à forte valeur qui se revendent vite
   ['iPad Pro', 'ipad pro', 'informatique', ['lbc', 'vinted']],
   ['AirPods Max', 'airpods max', 'image_son', ['lbc', 'vinted']],

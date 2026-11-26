@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const SITE = 'https://mounirzayn.github.io/ping/';
 const { spawn, execFile } = require('child_process');
 const os = require('os');
+const { refFor } = require('./refs.js');
 let BUILD = {}; try { BUILD = require('./build-info.json'); } catch {}
 const NTFY = process.env.PING_NTFY || 'https://ntfy.sh/';
 const PART = 'persist:ping';
@@ -91,6 +92,14 @@ function load() {
     state.unread = Math.min(state.unread, state.hits.length);
     state.watches.forEach((w) => { if (w.minDeal && w.interval === 180) w.interval = 120; });
     state.v11 = true;
+  }
+  if (!state.v12) { // nouvelles cotes de référence : on retire du pack ce qui n'a pas de cote fiable, et on vide les anciennes Pépites (cotes fausses)
+    const drop = new Set(['💎 Lego', '💎 TAG Heuer', '💎 Omega', '💎 Rolex']);
+    const ids = new Set(state.watches.filter((w) => w.minDeal && drop.has(w.name)).map((w) => w.id));
+    state.watches = state.watches.filter((w) => !ids.has(w.id));
+    state.hits = state.hits.filter((h) => h.fav || (!ids.has(h.watchId) && !h.pepite));
+    state.unread = Math.min(state.unread, state.hits.length);
+    state.v12 = true;
   }
   // À chaque démarrage : on repasse le flux au filtre actuel (les règles s'améliorent à chaque version)
   state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, h.cote ? { med: h.cote } : null)); });
@@ -406,7 +415,7 @@ const quantile = (a, q) => { const b = [...a].sort((x, y) => x - y); const i = (
 // Cote d'une annonce. Priorité aux VENTES RÉELLES (ventes terminées eBay) : c'est le vrai prix de revente.
 // À défaut, les prix demandés dans les annonces en ligne, corrigés de -10 % (on vend rarement au prix affiché).
 // « fiable » = assez d'objets semblables et des prix qui se tiennent : seules les cotes fiables déclenchent les Pépites.
-function coteForItem(w, title) {
+function liveCote(w, title) {
   const g = w.group || w.id;
   const fromSold = similarPrices(((state.sold || {})[g] || {}).items || [], title);
   let src = 'ventes', prices = fromSold;
@@ -422,10 +431,29 @@ function coteForItem(w, title) {
   return { med, n: c.n, src, fiable: !!prices.precise && c.n >= 6 && spread <= 0.5 };
 }
 // Ce que tu peux espérer gagner : revente à la cote, moins ~8 % (négociation, frais), moins le prix d'achat
+// Cote finale : la cote de RÉFÉRENCE du modèle (refs.js) d'abord. Les ventes relevées ne servent qu'à l'affiner
+// quand elles sont nombreuses et cohérentes. Sans modèle identifié : cote indicative seulement, jamais de Pépite.
+function coteForItem(w, title) {
+  const ref = refFor(title, w.cat);
+  const live = liveCote(w, title);
+  if (!ref) return live ? { ...live, fiable: false, src: live.src } : null; // pas de modèle reconnu : à titre indicatif
+  let med = ref.p;
+  if (live && live.fiable && live.med >= ref.p * 0.8 && live.med <= ref.p * 1.25) med = Math.round((ref.p * 2 + live.med) / 3);
+  return { med, n: live ? live.n : 0, src: 'ref', fiable: !ref.vague && !ref.estimate, label: ref.label, vague: !!ref.vague, estimate: !!ref.estimate };
+}
+// Verdict clair pour chaque annonce
+function verdictOf(price, c) {
+  if (!c || price == null || c.src !== 'ref') return null;
+  const marge = Math.round(c.med * 0.92 - price);
+  if (price < c.med * 0.5) return { v: 'arnaque', marge, txt: `⚠️ TROP BAS pour un ${c.label} : arnaque probable (photo, bloqué, copie, faux vendeur). Ne paie jamais hors plateforme.` };
+  if (price <= c.med * 0.75 && marge >= 40) return { v: 'top', marge, txt: `✅ BONNE AFFAIRE : ${c.label} revendu ~${c.med} €, marge ~+${marge} €${c.vague || c.estimate ? ' (vérifie la version / la config)' : ''}` };
+  if (price <= c.med * 0.9 && marge > 0) return { v: 'ok', marge, txt: `🟡 Prix correct, petite marge (~+${marge} €)` };
+  return { v: 'cher', marge, txt: `❌ Pas une affaire : au prix du marché (${c.label} ~${c.med} €) ou plus cher` };
+}
 const marginOf = (price, c) => (c && price != null ? Math.round(c.med * 0.92 - price) : null);
 // Mode Pépites : seulement les annonces au moins X % sous leur cote, et seulement si la cote est fiable
 // au-delà de -55 % c'est presque toujours une arnaque, une pièce ou un objet en panne : écarté
-const dealOk = (w, it, c) => !w.minDeal || !!(c && c.fiable && it.price != null && it.price <= c.med * (1 - w.minDeal / 100) && it.price >= c.med * 0.45);
+const dealOk = (w, it, c) => { if (!w.minDeal) return true; const v = verdictOf(it.price, c); return !!(v && v.v === 'top' && !c.vague && it.price <= c.med * (1 - Math.min(w.minDeal, 25) / 100)); };
 
 // ---------- Vérification des Pépites : lecture de la description ----------
 // Le titre ne dit pas tout (RAM, carte graphique, défauts…). Pour chaque Pépite candidate, Ping ouvre l'annonce,
@@ -607,7 +635,7 @@ async function check(id, manual = false) {
   w.primed = true; // premier passage : mémorise l'existant sans notifier
   w.count = (w.count || 0) + hits.length;
 
-  const stamped = hits.map((h) => { const c = coteForItem(w, h.title + (h.specs ? ' ' + h.specs.replace(/·/g, ' ') : '')); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, pepite: !!w.minDeal, at: Date.now(), cote: c ? c.med : null, coteN: c ? c.n : 0, coteSrc: c ? c.src : null, fiable: c ? c.fiable : false, marge: marginOf(h.price, c) }; });
+  const stamped = hits.map((h) => { const c = coteForItem(w, h.title + (h.specs ? ' ' + h.specs.replace(/·/g, ' ') : '')); return { ...h, watchId: w.id, watchName: w.name, cat: w.cat, pepite: !!w.minDeal, at: Date.now(), verdict: (verdictOf(h.price, c) || {}).v || null, verdictTxt: (verdictOf(h.price, c) || {}).txt || '', refLabel: c && c.label || '', cote: c ? c.med : null, coteN: c ? c.n : 0, coteSrc: c ? c.src : null, fiable: c ? c.fiable : false, marge: marginOf(h.price, c) }; });
   state.hits = keepFavs([...stamped, ...state.hits]);
   state.unread += stamped.length;
   save();
@@ -618,8 +646,8 @@ async function check(id, manual = false) {
   const overBudget = state.alertDay === today() && (state.alertCount || 0) >= budget;
   const solo = overBudget ? [] : stamped.slice(0, state.ntfyToken ? MAX_NOTIF_PER_CYCLE : 2); // abonnement : jusqu'à 6 alertes détaillées par passage
   solo.forEach((h) => notify({
-    title: `${h.cote && h.price != null && h.price <= h.cote * 0.75 ? '💎' : '🔔'} ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.minDeal && !w.name.startsWith('💎') ? '💎 ' : ''}${w.name}`,
-    message: `${h.title}\n${h.site}${h.specs ? ' · ' + h.specs : ''}${coteLine(h.price, h.cote, h)}`,
+    title: `${h.verdict === 'top' ? '💎' : h.verdict === 'arnaque' ? '⚠️' : '🔔'} ${h.price != null ? h.price.toLocaleString('fr-FR') + ' € · ' : ''}${w.minDeal && !w.name.startsWith('💎') ? '💎 ' : ''}${w.name}`,
+    message: `${h.title}\n${h.site}${h.specs ? ' · ' + h.specs : ''}${coteLine(h.price, h.cote, h)}${h.verdictTxt ? '\n' + h.verdictTxt : ''}`,
     url: h.url, img: h.img, pepite: !!w.minDeal,
   }));
   const rest = stamped.slice(solo.length);
@@ -716,8 +744,8 @@ function coteLine(price, cote, h = {}) {
   if (!cote || price == null) return '';
   const d = Math.round(((price - cote) / cote) * 100);
   const m = h.marge != null ? ` · marge ~${h.marge > 0 ? '+' : ''}${h.marge.toLocaleString('fr-FR')} €` : '';
-  const src = h.coteSrc === 'ventes' ? `${h.coteN} ventes eBay` : `${h.coteN || ''} annonces`;
-  return `\nCote ~${cote.toLocaleString('fr-FR')} € · ${d > 0 ? '+' : ''}${d} %${m} (${src}${h.fiable ? '' : ', peu fiable'})`;
+  const src = h.coteSrc === 'ref' ? `cote de référence ${h.refLabel || ''}`.trim() : h.coteSrc === 'ventes' ? `${h.coteN} ventes eBay` : `${h.coteN || ''} annonces`;
+  return `\nCote ~${cote.toLocaleString('fr-FR')} € · ${d > 0 ? '+' : ''}${d} %${m} (${src}${h.fiable || h.coteSrc === 'ref' ? '' : ', modèle non reconnu : indicatif'})`;
 }
 
 // ---------- Envoi vers le téléphone (ntfy) ----------

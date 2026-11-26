@@ -19,6 +19,7 @@
     "productName": "Ping",
     "files": [
       "main.js",
+      "refs.js",
       "preload.js",
       "index.html",
       "browser.html",

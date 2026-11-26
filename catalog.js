@@ -20,14 +20,14 @@
     },
     {
       id: 'multimedia', label: 'Multimédia', strict: true,
-      sites: ['lbc', 'fb', 'vinted', 'ebay'], defaults: ['lbc', 'fb', 'vinted'],
+      sites: ['lbc', 'fb', 'vinted', 'ebay', 'joybuy'], defaults: ['lbc', 'fb', 'vinted'],
       links: [['ParuVendu', 'https://www.paruvendu.fr'], ['Easy Cash', 'https://bons-plans.easycash.fr'], ['Cash Express', 'https://www.cashexpress.fr'], ['Back Market', 'https://www.backmarket.fr'], ['Rakuten', 'https://fr.shopping.rakuten.com']],
       cats: [['consoles', 'Consoles', 43], ['telephones', 'Téléphones & objets connectés', 17], ['informatique', 'Ordinateurs', 15],
         ['image_son', 'Photo, audio & vidéo', 16]],
     },
     {
       id: 'maison', label: 'Maison & jardin',
-      sites: ['lbc', 'fb', 'vinted', 'ebay'], defaults: ['lbc', 'fb'],
+      sites: ['lbc', 'fb', 'vinted', 'ebay', 'joybuy'], defaults: ['lbc', 'fb'],
       links: [['ParuVendu', 'https://www.paruvendu.fr'], ['Easy Cash', 'https://bons-plans.easycash.fr'], ['Cash Express', 'https://www.cashexpress.fr'], ['Selency', 'https://www.selency.fr']],
       cats: [['mobilier', 'Ameublement', 19], ['electromenager', 'Électroménager', 20], ['decoration', 'Décoration', 39],
         ['bricolage', 'Bricolage', 21], ['jardinage', 'Jardinage', 52], ['arts_table', 'Arts de la table', 45]],
@@ -41,7 +41,7 @@
     },
     {
       id: 'loisirs', label: 'Loisirs',
-      sites: ['lbc', 'fb', 'vinted', 'ebay'], defaults: ['lbc', 'fb', 'vinted'],
+      sites: ['lbc', 'fb', 'vinted', 'ebay', 'joybuy'], defaults: ['lbc', 'fb', 'vinted'],
       links: [['ParuVendu', 'https://www.paruvendu.fr'], ['Easy Cash', 'https://bons-plans.easycash.fr'], ['Cash Express', 'https://www.cashexpress.fr'], ['Rakuten', 'https://fr.shopping.rakuten.com']],
       cats: [['jeux_jouets', 'Jeux & jouets', 41], ['sport', 'Sport & plein air', 29], ['velos', 'Vélos', 55], ['instruments', 'Instruments de musique', 30],
         ['collection', 'Collection', 40], ['livres', 'Livres', 27], ['dvd', 'DVD & films', 25], ['cd', 'CD & vinyles', 26]],
@@ -59,7 +59,7 @@
       cats: [['tout', 'Toutes catégories', null], ['animaux', 'Animaux', 28], ['autres_objets', 'Autres', 38]],
     },
   ];
-  const SITE_NAMES = { lbc: 'Leboncoin', fb: 'Marketplace', vinted: 'Vinted', ebay: 'eBay' };
+  const SITE_NAMES = { lbc: 'Leboncoin', fb: 'Marketplace', vinted: 'Vinted', ebay: 'eBay', joybuy: 'Joybuy' };
 
   // Index à plat : clé → { label, lbc, group }
   const CATS = {};
@@ -89,6 +89,10 @@
       u = new URL('https://www.vinted.fr/catalog');
       u.searchParams.set('search_text', query); u.searchParams.set('order', 'newest_first');
       if (min) u.searchParams.set('price_from', min); if (max) u.searchParams.set('price_to', max);
+    } else if (site === 'joybuy') {
+      // Joybuy (JD.com) : boutique neuve. Ping alerte sur les nouveaux produits ET les baisses de prix (ventes flash)
+      u = new URL('https://www.joybuy.fr/s');
+      u.searchParams.set('k', query);
     } else {
       u = new URL('https://www.ebay.fr/sch/i.html');
       u.searchParams.set('_nkw', query); u.searchParams.set('_sop', '10');

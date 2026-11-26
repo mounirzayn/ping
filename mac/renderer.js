@@ -267,25 +267,25 @@ $('#soundOn').onchange = (e) => act('setSound', e.target.checked);
 const WATCH_EXCL = 'cassé, pour pièces, à réparer, en panne, réplique, replica, copie, imitation, inspiré, homage, hommage, aaa, boîte seule, bracelet seul, cadran seul';
 const CAR_EXCL = 'accidenté, accidentée, moteur hs, boîte hs, joint de culasse, pour pièces, épave, non roulant, sans ct, export, sans papiers, vendu en l état';
 const PACK = [
-  ['PS5', 'ps5, playstation 5', 'consoles', ['lbc', 'vinted', 'fb']],
+  ['PS5', 'ps5, playstation 5', 'consoles', ['lbc', 'vinted', 'fb', 'joybuy']],
   ['Switch OLED', 'switch oled', 'consoles', ['lbc', 'vinted']],
-  ['Steam Deck', 'steam deck', 'consoles', ['lbc', 'fb']],
-  ['Cartes graphiques RTX', 'rtx', 'informatique', ['lbc', 'fb', 'ebay']],
+  ['Steam Deck', 'steam deck', 'consoles', ['lbc', 'fb', 'joybuy']],
+  ['Cartes graphiques RTX', 'rtx', 'informatique', ['lbc', 'fb', 'ebay', 'joybuy']],
   ['PC gamer', 'pc gamer, pc gaming', 'informatique', ['lbc', 'fb']],
-  ['MacBook', 'macbook', 'informatique', ['lbc', 'vinted']],
-  ['iPhone', 'iphone', 'telephones', ['lbc', 'vinted']],
-  ['Dyson', 'dyson', 'electromenager', ['lbc', 'vinted']],
+  ['MacBook', 'macbook', 'informatique', ['lbc', 'vinted', 'joybuy']],
+  ['iPhone', 'iphone', 'telephones', ['lbc', 'vinted', 'joybuy']],
+  ['Dyson', 'dyson', 'electromenager', ['lbc', 'vinted', 'joybuy']],
   ['Thermomix', 'thermomix', 'electromenager', ['lbc', 'fb']],
   // Montres : les copies sont écartées (titre et description), prix plancher sur le luxe
-  ['Apple Watch', 'apple watch', 'telephones', ['lbc', 'vinted']],
+  ['Apple Watch', 'apple watch', 'telephones', ['lbc', 'vinted', 'joybuy']],
   ['Garmin', 'garmin fenix, garmin forerunner, garmin epix', 'telephones', ['lbc', 'vinted']],
   ['Tissot PRX', 'tissot prx', 'montres', ['lbc', 'vinted']],
   // Objets à forte valeur qui se revendent vite
-  ['iPad Pro', 'ipad pro', 'informatique', ['lbc', 'vinted']],
-  ['AirPods Max', 'airpods max', 'image_son', ['lbc', 'vinted']],
-  ['Appareil photo hybride', 'sony a7, canon eos r, fujifilm x-t', 'image_son', ['lbc', 'fb']],
-  ['Drone DJI', 'dji mini, dji air, dji mavic', 'image_son', ['lbc', 'fb']],
-  ['Switch 2', 'switch 2', 'consoles', ['lbc', 'vinted']],
+  ['iPad Pro', 'ipad pro', 'informatique', ['lbc', 'vinted', 'joybuy']],
+  ['AirPods Max', 'airpods max', 'image_son', ['lbc', 'vinted', 'joybuy']],
+  ['Appareil photo hybride', 'sony a7, canon eos r, fujifilm x-t', 'image_son', ['lbc', 'fb', 'joybuy']],
+  ['Drone DJI', 'dji mini, dji air, dji mavic', 'image_son', ['lbc', 'fb', 'joybuy']],
+  ['Switch 2', 'switch 2', 'consoles', ['lbc', 'vinted', 'joybuy']],
 ];
 $('#btnPack').onclick = async () => {
   const have = new Set(S.watches.filter((w) => w.minDeal).map((w) => w.name));

@@ -101,6 +101,17 @@ function load() {
     state.unread = Math.min(state.unread, state.hits.length);
     state.v12 = true;
   }
+  if (!state.v13) { // Joybuy ajouté aux Pépites où il y a des ventes flash sur du neuf
+    const JOY = ['💎 PS5', '💎 Switch 2', '💎 Steam Deck', '💎 Cartes graphiques RTX', '💎 MacBook', '💎 iPhone', '💎 Dyson', '💎 iPad Pro', '💎 AirPods Max', '💎 Apple Watch', '💎 Drone DJI', '💎 Appareil photo hybride'];
+    for (const name of JOY) {
+      const g = state.watches.filter((w) => w.minDeal && w.name === name);
+      if (!g.length || g.some((w) => w.site === 'Joybuy')) continue;
+      const b = g[0]; const q = String(b.include || '').split(',')[0].trim();
+      if (!q) continue;
+      state.watches.push({ ...b, id: crypto.randomUUID(), site: 'Joybuy', url: 'https://www.joybuy.fr/s?k=' + encodeURIComponent(q), seen: [], primed: false, count: 0, status: 'pending', cote: null, px: {} });
+    }
+    state.v13 = true;
+  }
   // À chaque démarrage : on repasse le flux au filtre actuel (les règles s'améliorent à chaque version)
   state.hits = state.hits.filter((h) => { const w = state.watches.find((x) => x.id === h.watchId); return !w || (matches(w, h) && !belowCote(w, h, h.cote ? { med: h.cote } : null)); });
   state.unread = Math.min(state.unread, state.hits.length);
@@ -192,6 +203,7 @@ function extractListings() {
     [/facebook\.com\/marketplace\/item\/(\d+)/, 'Marketplace'],
     [/vinted\.[a-z.]+\/items\/(\d+)/, 'Vinted'],
     [/ebay\.[a-z.]+\/itm\/(?:[^/]+\/)?(\d{9,})/, 'eBay'],
+    [/joybuy\.[a-z.]+\/dp\/[^/?#]+\/(\d{6,})/, 'Joybuy'],
   ];
   // Prix : "20 €", "1 350 €", "230.00 €", "21,70 €", "€200", "EUR 12,00"
   const priceRe = /(?:€|EUR)[ \u202f\u00a0]?(\d{1,3}(?:[ \u202f\u00a0.]\d{3})*|\d+)(?:[.,](\d{1,2}))?|(\d{1,3}(?:[ \u202f\u00a0.]\d{3})*|\d+)(?:[.,](\d{1,2}))?[ \u202f\u00a0]?(?:€|EUR)/; // pas de retour à la ligne dans un prix
@@ -626,7 +638,16 @@ async function check(id, manual = false) {
   if (!w.cote || Date.now() - w.cote.at > COTE_EVERY) enqueue(() => checkCote(w.id), 'cote:' + w.id);
   if (w.cat !== 'voitures') { const g = w.group || w.id; const sd = (state.sold || {})[g]; if (!sd || Date.now() - sd.at > SOLD_EVERY) enqueue(() => checkSold(g), 'sold:' + g); }
   const seen = new Set(w.seen || []);
-  const fresh = result.items.filter((it) => !seen.has(it.id));
+  // Boutiques neuves (Joybuy) : une baisse de prix d'au moins 10 % sur un produit déjà vu compte comme nouveauté (vente flash)
+  const px = w.px || {}; const drops = [];
+  for (const it of result.items) {
+    if (it.site !== 'Joybuy' || it.price == null) continue;
+    const old = px[it.id];
+    if (seen.has(it.id) && old && it.price <= old * 0.9) { drops.push({ ...it, title: `${it.title} (baisse : ${old} € → ${it.price} €)` }); }
+    px[it.id] = it.price;
+  }
+  if (Object.keys(px).length) { const k = Object.keys(px); w.px = k.length > 600 ? Object.fromEntries(k.slice(-500).map((x) => [x, px[x]])) : px; }
+  const fresh = result.items.filter((it) => !seen.has(it.id)).concat(drops);
   result.items.forEach((it) => seen.add(it.id));
   w.seen = [...seen].slice(-MAX_SEEN);
   let hits = w.primed ? fresh.filter((it) => { const c = coteForItem(w, it.title); return matches(w, it) && !belowCote(w, it, c) && dealOk(w, it, c); }) : [];
@@ -917,6 +938,7 @@ function rewriteUrl(url, q, min, max) {
     if (/leboncoin/.test(u.host)) { if (q) set('text', q); set('price', min || max ? `${min || 'min'}-${max || 'max'}` : ''); }
     else if (/facebook/.test(u.host)) { if (q) set('query', q); set('minPrice', min); set('maxPrice', max); }
     else if (/vinted/.test(u.host)) { if (q) set('search_text', q); set('price_from', min); set('price_to', max); }
+    else if (/joybuy/.test(u.host)) { if (q) set('k', q); }
     else if (/ebay/.test(u.host)) { if (q) set('_nkw', q); set('_udlo', min); set('_udhi', max); }
     return u.toString();
   } catch { return url; }
